@@ -161,18 +161,27 @@ insert_profile() {
     return 0
   fi
 
+  # Write snippet to temp file (avoids awk multi-line variable issues on macOS/BWK awk)
+  local snippet_file
+  snippet_file=$(mktemp)
+  printf '%s\n' "$snippet" > "$snippet_file"
+
   local tmpfile
   tmpfile=$(mktemp)
-  awk -v snippet="$snippet" '
+  awk -v snippet_file="$snippet_file" '
     /^[[:space:]]*"\* 2>\/dev\/null\*": "allow"/ && !inserted {
       print
-      print snippet
+      while ((getline line < snippet_file) > 0) {
+        print line
+      }
+      close(snippet_file)
       inserted=1
       next
     }
     { print }
   ' "$file" > "$tmpfile"
   mv "$tmpfile" "$file"
+  rm -f "$snippet_file"
 }
 
 # Apply a profile to all three patchable agent files using role-appropriate
