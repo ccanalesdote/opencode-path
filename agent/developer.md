@@ -55,6 +55,16 @@ permission:
     "cargo publish*": "deny"
     "twine upload*": "deny"
 
+    # External-impact operations (deployment, release, infra)
+    "vercel deploy*": "deny"
+    "netlify deploy*": "deny"
+    "firebase deploy*": "deny"
+    "gh release*": "deny"
+    "docker push*": "deny"
+    "kubectl apply*": "deny"
+    "terraform apply*": "deny"
+    "pulumi up*": "deny"
+
     # Everything project-specific asks first:
     # tests, builds, formatters, linters, package managers,
     # generators, codegen, Swift/Go/Rust/Python/Node commands, etc.

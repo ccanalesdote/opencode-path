@@ -44,6 +44,16 @@ permission:
     "git merge*": "deny"
     "git rebase*": "deny"
 
+    # External-impact operations (deployment, release, infra)
+    "vercel deploy*": "deny"
+    "netlify deploy*": "deny"
+    "firebase deploy*": "deny"
+    "gh release*": "deny"
+    "docker push*": "deny"
+    "kubectl apply*": "deny"
+    "terraform apply*": "deny"
+    "pulumi up*": "deny"
+
     # Everything project/toolchain-specific requires confirmation
     "*": "ask"
   task: deny

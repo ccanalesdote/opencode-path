@@ -41,6 +41,8 @@ The installer copies files to `~/.config/opencode/`:
 - `agent/developer.md` — Developer agent
 - `agent/reviewer.md` — Reviewer agent
 
+**Backup**: If agent files already exist in `~/.config/opencode/agent/`, the installer creates a timestamped backup before overwriting them (e.g., `~/.config/opencode/agent_backup_20260604_120000/`). Your model configuration and any manual edits are preserved in the backup.
+
 Then it prompts you to optionally select a command profile for your stack:
 
 ```
@@ -54,7 +56,8 @@ Optional command profile:
   7) Java / Kotlin
   8) Ruby
   9) PHP
- 10) All common validation profiles
+ 10) All stacks — broad convenience mode
+     (enables all validation profiles; useful for multi-stack projects)
 ```
 
 Profiles are applied only to the installed files under `~/.config/opencode/agent/`. The repository source files remain technology-agnostic. If you select "None", the default conservative policy applies and project-specific commands will ask for confirmation.
@@ -218,7 +221,7 @@ The plan file includes:
 
 **Permissions**:
 - Full edit/write
-- Risk-based bash policy: read-only inspection and simple creation are always allowed; toolchain-specific commands ask first; destructive and publishing operations are denied
+- Risk-based bash policy: read-only inspection and simple creation are always allowed; toolchain-specific commands ask first; destructive, publishing, deployment, and external-impact operations are denied
 - Can invoke subagents: `explore`, `reviewer`
 
 ### Auditor
@@ -235,7 +238,7 @@ The plan file includes:
 - Read-only on codebase
 - Universal inspection and git read commands are always allowed
 - Project-specific validation (tests, linters, type checks) requires confirmation unless an install profile was applied
-- Mutating commands and git state changes are forbidden
+- Mutating commands, git state changes, deployment, and external-impact commands are forbidden
 - Can invoke subagents: `explore`, `reviewer`
 
 ### Reviewer
@@ -253,7 +256,7 @@ The plan file includes:
 - Read-only on codebase
 - Universal inspection and git read commands are always allowed
 - Project-specific validation requires confirmation unless an install profile was applied
-- Mutating commands and git state changes are forbidden
+- Mutating commands, git state changes, deployment, and external-impact commands are forbidden
 - Cannot invoke subagents (leaf node)
 
 ### Explore
@@ -276,12 +279,54 @@ The committed workflow is technology-agnostic. It allows universal inspection co
 
 This keeps the workflow usable across JavaScript, TypeScript, Python, Go, Rust, Swift, Java, Kotlin, Ruby, PHP, and other stacks without baking one ecosystem into the default config.
 
+### External-impact command denylist
+
+In addition to the risk-based `ask` catch-all, all three agents (Developer, Auditor, Reviewer) explicitly deny a short list of commands known to affect external systems:
+
+- **Deployment**: `vercel deploy*`, `netlify deploy*`, `firebase deploy*`
+- **Release**: `gh release*`
+- **Container registry**: `docker push*`
+- **Infrastructure**: `kubectl apply*`, `terraform apply*`, `pulumi up*`
+
+These are denied unconditionally, even if an optional profile is applied. They require the user to run them manually outside of opencode.
+
 ## Optional command profiles
 
-The installer can apply optional command profiles to the installed agent files. These profiles are convenience allowlists for common validation commands. They are applied to Developer, Auditor, and Reviewer. Architect is not patched (it has `bash: deny`).
+The installer can apply optional command profiles to the installed agent files. These profiles are convenience allowlists for common validation commands.
+
+### Role-specific profile behavior
+
+Profiles are not applied uniformly across agents. Each profile has two variants:
+
+- **Developer** receives the full profile, including controlled mutating commands (such as formatters or builds that write artifacts) listed as `ask` so the user confirms before they run.
+- **Auditor and Reviewer** receive only the read-only validation subset. Commands that write files — formatters, build commands producing artifacts, or anything that mutates state — are intentionally excluded from their variant.
+
+Examples of commands that differ by role:
+
+| Command | Developer | Auditor / Reviewer |
+|---|---|---|
+| `go test*`, `go vet*` | `allow` | `allow` |
+| `go fmt*`, `gofmt*` | `ask` | not included |
+| `cargo fmt --check*` | `allow` | `allow` |
+| `cargo fmt*` | `ask` | not included |
+| `swift test*` | `allow` | `allow` |
+| `swift format lint*` | `allow` | `allow` |
+| `swift build*`, `swift format*` | `ask` | not included |
+
+This ensures Auditor and Reviewer remain strictly read-only regardless of which profile is selected.
+
+### All stacks — broad convenience mode
+
+Option 10 enables all validation profiles at once. It is useful for:
+- Projects that span multiple languages or runtimes
+- Users who prefer fewer confirmation prompts across a wide range of stacks
+
+It increases the allowed command surface compared to selecting a single profile. It still does not enable publishing, deployment, dependency installation, destructive git operations, or write access for Auditor or Reviewer.
+
+### What profiles add and do not add
 
 **Profiles add**:
-- Stack-specific test runners, linters, type checkers, and format checkers.
+- Stack-specific test runners, linters, type checkers, and format-check commands.
 
 **Profiles do not enable**:
 - Dependency installation (`npm install`, `pip install`, etc.)
@@ -373,6 +418,10 @@ This is expected with the technology-agnostic default. Either approve the comman
 ### Optional profile did not apply
 
 Re-run `./install.sh` and select the desired profile. Or manually add the command patterns to the installed agent files under `~/.config/opencode/agent/`.
+
+### I lost my model configuration after re-running the installer
+
+The installer creates a timestamped backup before overwriting existing files (e.g., `~/.config/opencode/agent_backup_20260604_120000/`). Copy the `model:` field from the backed-up file back into the newly installed file.
 
 ### Duplicate profile entries
 
