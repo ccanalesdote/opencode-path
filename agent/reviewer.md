@@ -5,6 +5,18 @@ permission:
   edit: deny
   write: deny
   bash:
+    # Default: ask for anything not explicitly allowed or denied
+    "*": "ask"
+
+    # Pipes and redirections to read-only tools (allows truncation/filtering of output)
+    "* | tail*": "allow"
+    "* | head*": "allow"
+    "* | wc*": "allow"
+    "* | grep*": "allow"
+    "* | rg*": "allow"
+    "* 2>&1*": "allow"
+    "* 2>/dev/null*": "allow"
+
     # Universal read-only inspection
     "pwd": "allow"
     "ls*": "allow"
@@ -53,9 +65,6 @@ permission:
     "kubectl apply*": "deny"
     "terraform apply*": "deny"
     "pulumi up*": "deny"
-
-    # Everything project/toolchain-specific requires confirmation
-    "*": "ask"
   task: deny
 ---
 

@@ -388,14 +388,19 @@ Profile markers prevent duplicate inserts if the installer is re-run. To apply a
 
 ### Adding project-specific validation commands
 
-Edit the installed agent files in `~/.config/opencode/agent/` and add patterns before the `"*": "ask"` catch-all:
+Edit the installed agent files in `~/.config/opencode/agent/` and add patterns after the `"*": "ask"` catch-all and pipe/redirection patterns, but before the deny rules:
 
 ```yaml
 bash:
-  # ... existing rules ...
+  "*": "ask"
+  # ... pipe/redirection patterns ...
+  # ... read-only inspection patterns ...
+  
+  # Add your project-specific patterns here:
   "make test*": "allow"        # project-specific make target
   "go test ./...": "allow"     # specific go test invocation
-  "*": "ask"
+  
+  # ... deny rules at the end ...
 ```
 
 ### Adjusting scope

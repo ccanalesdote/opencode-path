@@ -20,8 +20,8 @@ TARGET_DIR="$HOME/.config/opencode"
 #                modify files. Formatter commands that write to disk are
 #                intentionally excluded from this variant.
 #
-# Snippets are inserted before the final "*": "ask" line in the bash
-# permission block. Markers prevent duplicate inserts on re-runs.
+# Snippets are inserted after `"* 2>/dev/null*": "allow"` (the last pipe/redirection
+# pattern) in the bash permission block. Markers prevent duplicate inserts on re-runs.
 # architect.md and spec.md have bash: deny and are never patched.
 # ---------------------------------------------------------------------------
 
@@ -148,7 +148,7 @@ PROFILE_PHP_READONLY="$PROFILE_PHP_DEV"
 # ---------------------------------------------------------------------------
 # Helper: insert a profile snippet into a single agent file.
 # Skips insertion if the BEGIN marker already exists (idempotent).
-# Inserts the snippet immediately before the line matching `"*": "ask"`.
+# Inserts the snippet immediately after the line matching `"* 2>/dev/null*": "allow"`.
 # ---------------------------------------------------------------------------
 insert_profile() {
   local file="$1"
@@ -164,9 +164,11 @@ insert_profile() {
   local tmpfile
   tmpfile=$(mktemp)
   awk -v snippet="$snippet" '
-    /^[[:space:]]*"\*": "ask"/ && !inserted {
+    /^[[:space:]]*"\* 2>\/dev\/null\*": "allow"/ && !inserted {
+      print
       print snippet
       inserted=1
+      next
     }
     { print }
   ' "$file" > "$tmpfile"

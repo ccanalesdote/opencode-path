@@ -5,6 +5,18 @@ permission:
   edit: allow
   write: allow
   bash:
+    # Default: ask for anything not explicitly allowed or denied
+    "*": "ask"
+
+    # Pipes and redirections to read-only tools (allows truncation/filtering of output)
+    "* | tail*": "allow"
+    "* | head*": "allow"
+    "* | wc*": "allow"
+    "* | grep*": "allow"
+    "* | rg*": "allow"
+    "* 2>&1*": "allow"
+    "* 2>/dev/null*": "allow"
+
     # Universal read-only inspection
     "pwd": "allow"
     "ls*": "allow"
@@ -64,11 +76,6 @@ permission:
     "kubectl apply*": "deny"
     "terraform apply*": "deny"
     "pulumi up*": "deny"
-
-    # Everything project-specific asks first:
-    # tests, builds, formatters, linters, package managers,
-    # generators, codegen, Swift/Go/Rust/Python/Node commands, etc.
-    "*": "ask"
   task: allow
 ---
 
