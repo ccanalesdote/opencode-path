@@ -9,9 +9,9 @@ This workflow defines 5 specialized agents with clear responsibilities:
 | Agent | Role | Mode | Permissions |
 |-------|------|------|-------------|
 | **Architect** | Designs system architecture, produces structured design decisions | Primary | Read-only + write `*plan*.md` |
-| **Developer** | Implements code changes end-to-end | Primary | Full edit/write/bash |
-| **Auditor** | Audits existing work for failures, risks, and gaps | Primary | Read-only + validation tools |
-| **Reviewer** | Reviews code changes, returns PASS/FAIL verdict | Subagent | Read-only + validation tools |
+| **Developer** | Implements code changes end-to-end | Primary | Edit/write + risk-based bash policy |
+| **Auditor** | Audits existing work for failures, risks, and gaps | Primary | Read-only + inspection commands + confirmation for project-specific validation |
+| **Reviewer** | Reviews code changes, returns PASS/FAIL verdict | Subagent | Read-only + inspection commands + confirmation for project-specific validation |
 | **Explore** | Fast codebase exploration | Subagent (built-in) | Read-only |
 
 ### Key Design Principles
@@ -19,7 +19,8 @@ This workflow defines 5 specialized agents with clear responsibilities:
 1. **Blast Radius Minimization**: Only Developer can modify files. All other agents are read-only.
 2. **Separation of Concerns**: Design (Architect) → Implement (Developer) → Review (Reviewer) → Audit (Auditor).
 3. **Cross-Session Planning**: Architect produces self-contained briefs for implementation in new sessions.
-4. **Granular Permissions**: Scoped bash allowlists for validation tools (tests, linters, type checkers) without mutation capabilities.
+4. **Granular Permissions**: Risk-based bash policy for Developer; scoped read-only inspection for Auditor and Reviewer.
+5. **Technology Agnosticism**: The base workflow does not assume a language, package manager, test runner, formatter, linter, or build system. Project-specific commands are opt-in through confirmation, local customization, or optional install-time profiles.
 
 ## Installation
 
@@ -39,6 +40,24 @@ The installer copies files to `~/.config/opencode/`:
 - `agent/auditor.md` — Auditor agent
 - `agent/developer.md` — Developer agent
 - `agent/reviewer.md` — Reviewer agent
+
+Then it prompts you to optionally select a command profile for your stack:
+
+```
+Optional command profile:
+  1) None — technology-agnostic default (recommended)
+  2) JavaScript / TypeScript
+  3) Python
+  4) Go
+  5) Rust
+  6) Swift
+  7) Java / Kotlin
+  8) Ruby
+  9) PHP
+ 10) All common validation profiles
+```
+
+Profiles are applied only to the installed files under `~/.config/opencode/agent/`. The repository source files remain technology-agnostic. If you select "None", the default conservative policy applies and project-specific commands will ask for confirmation.
 
 **Restart opencode** after installation.
 
@@ -121,7 +140,8 @@ model: anthropic/claude-haiku-4-5
    # Developer will:
    # - Read the plan
    # - Implement in small steps
-   # - Self-verify (run tests, linters)
+   # - Inspect own diff; ask before running project-specific validation
+   #   unless commands are allowlisted by the installed profile
    # - Invoke Reviewer for QA
    # - Report back with changes and verdict
    ```
@@ -139,7 +159,9 @@ model: anthropic/claude-haiku-4-5
    > Audit the authentication implementation
    
    # Auditor will:
-   # - Run tests, linters, type checks
+   # - Inspect files and git history
+   # - Ask before running project-specific validation commands
+   #   (or run them automatically if an install profile was applied)
    # - Look for failures, risks, gaps
    # - Return verdict: SHIP | SHIP WITH CAVEATS | DO NOT SHIP
    ```
@@ -159,7 +181,7 @@ When Architect writes a plan file, it's self-contained for a new session:
 
 The plan file includes:
 - Context the implementer needs
-- Step-by-step plan with verification commands
+- Step-by-step plan with verification steps
 - Edge cases to handle explicitly
 - Acceptance criteria (testable)
 - Codebase warnings
@@ -176,6 +198,7 @@ The plan file includes:
 - Can write `*plan*.md` files for cross-session handoff
 - Invokes `explore` for codebase reconnaissance
 - Invokes `reviewer` to stress-test designs
+- Technology-agnostic planning: does not assume a stack in acceptance criteria
 
 **Permissions**:
 - Read-only on codebase
@@ -189,12 +212,13 @@ The plan file includes:
 
 **Key Features**:
 - Implements well-defined tasks with clear acceptance criteria
-- Self-verifies (runs tests, linters, type checks)
+- Self-verifies by inspecting diffs; asks before running project-specific validation commands unless they are allowlisted
 - Invokes Reviewer before declaring done
 - Reports changes, verification, and Reviewer verdict
 
 **Permissions**:
-- Full edit/write/bash
+- Full edit/write
+- Risk-based bash policy: read-only inspection and simple creation are always allowed; toolchain-specific commands ask first; destructive and publishing operations are denied
 - Can invoke subagents: `explore`, `reviewer`
 
 ### Auditor
@@ -203,14 +227,15 @@ The plan file includes:
 
 **Key Features**:
 - 5-phase fault diagnosis protocol
-- Runs validation tools (tests, linters, type checks)
+- Runs read-only inspection commands freely; asks before project-specific validation
 - Returns verdict: SHIP | SHIP WITH CAVEATS | DO NOT SHIP
-- Suggests handoffs to Developer/Architect/Reviewer
+- Honest about what was and was not verified
 
 **Permissions**:
 - Read-only on codebase
-- Can run validation tools (scoped bash allowlist)
-- Cannot run mutating commands
+- Universal inspection and git read commands are always allowed
+- Project-specific validation (tests, linters, type checks) requires confirmation unless an install profile was applied
+- Mutating commands and git state changes are forbidden
 - Can invoke subagents: `explore`, `reviewer`
 
 ### Reviewer
@@ -219,14 +244,16 @@ The plan file includes:
 
 **Key Features**:
 - Returns structured PASS/FAIL verdict
-- Runs validation tools to verify claims
+- Runs read-only inspection commands freely; asks before project-specific validation
 - Severity scale: blocker | major | minor | nit
 - Specific findings with file:line locations
+- Clearly states what was not checked
 
 **Permissions**:
 - Read-only on codebase
-- Can run validation tools (scoped bash allowlist)
-- Cannot run mutating commands
+- Universal inspection and git read commands are always allowed
+- Project-specific validation requires confirmation unless an install profile was applied
+- Mutating commands and git state changes are forbidden
 - Cannot invoke subagents (leaf node)
 
 ### Explore
@@ -243,25 +270,62 @@ The plan file includes:
 - No bash
 - No file editing
 
+## Technology-agnostic default
+
+The committed workflow is technology-agnostic. It allows universal inspection commands and asks before running project-specific commands.
+
+This keeps the workflow usable across JavaScript, TypeScript, Python, Go, Rust, Swift, Java, Kotlin, Ruby, PHP, and other stacks without baking one ecosystem into the default config.
+
+## Optional command profiles
+
+The installer can apply optional command profiles to the installed agent files. These profiles are convenience allowlists for common validation commands. They are applied to Developer, Auditor, and Reviewer. Architect is not patched (it has `bash: deny`).
+
+**Profiles add**:
+- Stack-specific test runners, linters, type checkers, and format checkers.
+
+**Profiles do not enable**:
+- Dependency installation (`npm install`, `pip install`, etc.)
+- Publishing or deployment
+- Destructive git operations
+- Write access for Auditor or Reviewer
+- Broad filesystem mutations
+
+Example — Python profile adds to the `bash` block:
+
+```yaml
+  # BEGIN optional profile: python
+  "pytest*": "allow"
+  "python -m pytest*": "allow"
+  "python3 -m pytest*": "allow"
+  "ruff check*": "allow"
+  "mypy*": "allow"
+  "pyright*": "allow"
+  "python -m unittest*": "allow"
+  "python3 -m unittest*": "allow"
+  # END optional profile: python
+```
+
+Profile markers prevent duplicate inserts if the installer is re-run. To apply a different profile, re-run `./install.sh`. To remove a profile, edit the installed agent files under `~/.config/opencode/agent/` and delete the lines between the `BEGIN` and `END` markers.
+
 ## Customization
 
-### Adding New Validation Tools
+### Adding project-specific validation commands
 
-Edit the `bash` permission in `auditor.md` and `reviewer.md`:
+Edit the installed agent files in `~/.config/opencode/agent/` and add patterns before the `"*": "ask"` catch-all:
 
 ```yaml
 bash:
-  "npm test*": "allow"
-  "npx playwright test*": "allow"  # <-- Add new tool
-  "rm *": "deny"
+  # ... existing rules ...
+  "make test*": "allow"        # project-specific make target
+  "go test ./...": "allow"     # specific go test invocation
   "*": "ask"
 ```
 
-### Adjusting Scope
+### Adjusting scope
 
-- **Stricter**: Change `*: ask` to `*: deny` in bash permissions
+- **Stricter**: Change `"*": "ask"` to `"*": "deny"` in bash permissions
 - **Looser**: Add more patterns to the allowlist
-- **Project-specific**: Add patterns for your build tools (e.g., `make test*`, `cargo test*`)
+- **Per-agent**: Edit only the agent file you want to change
 
 ### Extending the Workflow
 
@@ -300,7 +364,25 @@ Your agent prompt here...
 
 - Check that bash patterns are quoted in YAML
 - Remember: insertion order matters (broad rules first, narrow rules last)
-- Use `*: ask` as a safe catch-all
+- Use `"*": "ask"` as a safe catch-all
+
+### Project-specific command asks for confirmation
+
+This is expected with the technology-agnostic default. Either approve the command when prompted, or re-run `./install.sh` and select an optional profile to allowlist it permanently.
+
+### Optional profile did not apply
+
+Re-run `./install.sh` and select the desired profile. Or manually add the command patterns to the installed agent files under `~/.config/opencode/agent/`.
+
+### Duplicate profile entries
+
+The installer uses profile markers to avoid duplicate inserts. If you manually edited the markers, remove the duplicate block carefully. The markers look like:
+
+```
+# BEGIN optional profile: python
+...
+# END optional profile: python
+```
 
 ### Agent behavior issues
 
@@ -312,8 +394,7 @@ Your agent prompt here...
 
 Contributions welcome! Areas for improvement:
 
-- Additional validation tool patterns
-- Language-agnostic bash allowlists (Python, Go, Rust, etc.)
+- Additional stack-specific profile snippets
 - More detailed cross-session planning examples
 - Performance benchmarks with different model combinations
 

@@ -100,7 +100,7 @@ This changes what "good" means. Specifically:
 - **Pre-choose patterns.** Do not say "use an appropriate helper." Say "use the existing `parseUserInput` helper at `src/utils/parse.ts:14`, which already handles null and trim."
 - **Pre-empt codebase gotchas.** If the project has quirks (eager loading, circular dependency risk, tests that run in a particular order, environment assumptions), call them out.
 - **Make every step verifiable.** Each step should leave the codebase in a working state and be checkable with a specific command or visual inspection.
-- **Be testable, not philosophical.** "The system should be robust" is not an acceptance criterion. "After step 4, running `npm test` passes and `curl localhost:3000/api/foo` returns 200 with the expected JSON" is.
+- **Be testable, not philosophical.** "The system should be robust" is not an acceptance criterion. "After step 4, the relevant tests pass and `curl localhost:3000/api/foo` returns 200 with the expected JSON" is. Name the specific command only when it is known from the project's documentation or codebase.
 
 ## Brief Structure (for plan files only)
 
@@ -143,6 +143,18 @@ Things the implementer would not know without reading the codebase carefully.
 - <what this plan explicitly does not cover>
 - ...
 ```
+
+## Technology-agnostic planning
+
+When naming verification commands in plans or acceptance criteria, do not assume a technology stack, package manager, test runner, linter, formatter, or build system.
+
+Prefer commands documented by the project itself. If the command is known from the codebase, name it exactly. If no validation command is known, include a discovery step such as:
+
+> "Inspect the README, package/build configuration, task runner files, or CI configuration to identify the project's validation commands."
+
+Acceptance criteria should be command-specific only when the command is known. Otherwise, state the observable behavior to verify and require the implementer to identify the correct project command first.
+
+Do not use `npm test`, `yarn test`, `pytest`, `go test`, `cargo test`, or any other stack-specific command as a placeholder unless the project is confirmed to use that toolchain.
 
 ## Output format for in-chat design responses (no file write)
 
