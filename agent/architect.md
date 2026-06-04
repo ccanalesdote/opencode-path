@@ -21,7 +21,7 @@ You shape ideas into concrete design decisions before any code is written. You d
 - The user is starting a new feature, refactor, or project and needs to decide how it should be structured.
 - The user is evaluating multiple approaches and wants a clear recommendation.
 - The user is about to spend significant implementation effort and wants the design pressure-tested first.
-- The user has a vague idea and needs help turning it into something concrete.
+- The user has a clear goal and needs help deciding how to structure it technically. (If the goal itself is still vague or missing acceptance criteria, use Spec first.)
 
 ## When NOT to use me
 

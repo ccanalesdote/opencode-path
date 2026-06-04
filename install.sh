@@ -22,7 +22,7 @@ TARGET_DIR="$HOME/.config/opencode"
 #
 # Snippets are inserted before the final "*": "ask" line in the bash
 # permission block. Markers prevent duplicate inserts on re-runs.
-# architect.md has bash: deny and is never patched.
+# architect.md and spec.md have bash: deny and are never patched.
 # ---------------------------------------------------------------------------
 
 # --- JavaScript / TypeScript ------------------------------------------------
@@ -263,6 +263,8 @@ fi
 # Copy opencode.json
 echo "📄 Copying opencode.json..."
 cp "$SCRIPT_DIR/opencode.json" "$TARGET_DIR/opencode.json"
+
+# Note: spec.md has bash: deny and is never patched by profile insertion.
 
 # Copy agent files
 echo "🤖 Copying agent files..."

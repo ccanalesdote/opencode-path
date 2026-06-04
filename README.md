@@ -8,6 +8,7 @@ This workflow defines 5 specialized agents with clear responsibilities:
 
 | Agent | Role | Mode | Permissions |
 |-------|------|------|-------------|
+| **Spec** | Clarifies vague stories into testable specs before design | Primary | Read-only, no bash |
 | **Architect** | Designs system architecture, produces structured design decisions | Primary | Read-only + write `*plan*.md` |
 | **Developer** | Implements code changes end-to-end | Primary | Edit/write + risk-based bash policy |
 | **Auditor** | Audits existing work for failures, risks, and gaps | Primary | Read-only + inspection commands + confirmation for project-specific validation |
@@ -17,7 +18,7 @@ This workflow defines 5 specialized agents with clear responsibilities:
 ### Key Design Principles
 
 1. **Blast Radius Minimization**: Only Developer can modify files. All other agents are read-only.
-2. **Separation of Concerns**: Design (Architect) → Implement (Developer) → Review (Reviewer) → Audit (Auditor).
+2. **Separation of Concerns**: Clarify (Spec) → Design (Architect) → Implement (Developer) → Review (Reviewer) → Audit (Auditor).
 3. **Cross-Session Planning**: Architect produces self-contained briefs for implementation in new sessions.
 4. **Granular Permissions**: Risk-based bash policy for Developer; scoped read-only inspection for Auditor and Reviewer.
 5. **Technology Agnosticism**: The base workflow does not assume a language, package manager, test runner, formatter, linter, or build system. Project-specific commands are opt-in through confirmation, local customization, or optional install-time profiles.
@@ -72,6 +73,7 @@ This workflow is **model-agnostic**. You must configure models for each agent ba
 
 | Agent | Recommended Model Tier | Rationale |
 |-------|----------------------|-----------|
+| **Spec** | Mid-tier (e.g., Claude Haiku, GPT-4-mini) | Structured clarification, not deep reasoning |
 | **Architect** | High-capability (e.g., Claude Sonnet, GPT-4) | Complex reasoning, tradeoff analysis |
 | **Developer** | High-capability (e.g., Claude Sonnet, GPT-4) | Code generation, multi-step implementation |
 | **Auditor** | High-capability (e.g., Claude Sonnet, GPT-4) | Fault diagnosis, pattern recognition |
@@ -122,6 +124,19 @@ model: anthropic/claude-haiku-4-5
 ## Usage
 
 ### Typical Workflow
+
+0. **Spec Phase** (Spec) — when the request is vague or missing acceptance criteria
+   ```
+   # In opencode, switch to Spec (Tab key)
+   > As a user I want to see my pending payments so I know what I owe.
+
+   # Spec will:
+   # - Restate the story and identify ambiguities
+   # - Propose acceptance criteria and edge cases
+   # - Separate facts from assumptions
+   # - Ask targeted questions to reduce ambiguity
+   # - Produce a handoff brief ready for Architect
+   ```
 
 1. **Design Phase** (Architect)
    ```bash
@@ -191,6 +206,23 @@ The plan file includes:
 - Out of scope items
 
 ## Agent Details
+
+### Spec
+
+**Purpose**: Requirements clarification partner. Turns vague stories, tickets, and HDUs into clear, testable, implementation-ready specifications.
+
+**Key Features**:
+- Core clarification protocol (restate → identify user/goal → extract requirements → surface ambiguities → propose AC → edge cases → questions)
+- Challenges vague language ("properly", "fast", "valid", "etc.")
+- Produces a structured handoff brief (problem, requirements, acceptance criteria, edge cases, open questions) ready for Architect
+- Can invoke `explore` to relate a story to existing codebase behavior
+- Never invents business rules silently — all inferences are labeled as assumptions
+
+**Permissions**:
+- Read-only on codebase
+- Cannot run bash commands
+- Cannot write files
+- Can invoke subagents: `explore`
 
 ### Architect
 
