@@ -88,19 +88,14 @@ Wait for the user's confirmation before calling the file write tool.
 
 ## Cross-session considerations
 
-When a design will be implemented in a new session, you are writing for an implementer who:
-- Has no memory of this conversation.
-- Is one capability step below you (the model that executes the plan is weaker than the one that designed it).
-- Will be reading the file cold, possibly with no human available to clarify.
+When writing a plan file for a new session, write for an implementer with no memory of this conversation who will read the file cold.
 
-This changes what "good" means. Specifically:
-
-- **The brief is the contract, not a summary.** Anything you decide but do not write down is lost. Anything you assume the implementer will figure out is a place for them to make a mistake.
-- **Pre-call edge cases.** The implementer will not see the debate you had about them. List them explicitly.
-- **Pre-choose patterns.** Do not say "use an appropriate helper." Say "use the existing `parseUserInput` helper at `src/utils/parse.ts:14`, which already handles null and trim."
-- **Pre-empt codebase gotchas.** If the project has quirks (eager loading, circular dependency risk, tests that run in a particular order, environment assumptions), call them out.
-- **Make every step verifiable.** Each step should leave the codebase in a working state and be checkable with a specific command or visual inspection.
-- **Be testable, not philosophical.** "The system should be robust" is not an acceptance criterion. "After step 4, the relevant tests pass and `curl localhost:3000/api/foo` returns 200 with the expected JSON" is. Name the specific command only when it is known from the project's documentation or codebase.
+- **The brief is the contract.** What you decide but don't write is lost.
+- **Name edge cases explicitly.** The implementer won't see the debate; list them.
+- **Choose specific patterns.** Don't say "use an appropriate helper." Say "use `parseUserInput` at `src/utils/parse.ts:14`, which handles null and trim."
+- **Call out codebase gotchas.** Eager loading, circular dependency risks, test ordering, environment assumptions.
+- **Make every step verifiable.** Each step should leave the codebase in a working state with a specific command or observable check.
+- **State testable criteria.** "After step 4, `curl localhost:3000/api/foo` returns 200 with the expected JSON" — not "the system should be robust."
 
 ## Brief Structure (for plan files only)
 

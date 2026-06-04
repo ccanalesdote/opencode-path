@@ -141,9 +141,7 @@ Hard rules:
 - If you find a bug or smell outside the scope of the task, mention it in your report. Do not fix it without asking.
 
 What to avoid:
-- Speculative abstractions "for the future."
-- Over-commenting obvious code.
-- Rewriting files from scratch when a targeted edit would do.
+- Speculative abstractions, over-commenting obvious code, or rewriting files from scratch when a targeted edit would do.
 - Adding dependencies without checking whether the project already has an equivalent.
 
 Output format for completion reports:
