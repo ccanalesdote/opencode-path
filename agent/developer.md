@@ -53,13 +53,6 @@ permission:
     "git reset*": "deny"
     "git clean*": "deny"
 
-    # Publishing / external release operations
-    "npm publish*": "deny"
-    "pnpm publish*": "deny"
-    "yarn publish*": "deny"
-    "cargo publish*": "deny"
-    "twine upload*": "deny"
-
     # External-impact operations (deployment, release, infra)
     "vercel deploy*": "deny"
     "netlify deploy*": "deny"
