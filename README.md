@@ -41,8 +41,9 @@ The installer copies files to `~/.config/opencode/`:
 - `agent/auditor.md` — Auditor agent
 - `agent/developer.md` — Developer agent
 - `agent/reviewer.md` — Reviewer agent
+- `agent/spec.md` — Spec agent
 
-**Backup**: If agent files already exist in `~/.config/opencode/agent/`, the installer creates a timestamped backup before overwriting them (e.g., `~/.config/opencode/agent_backup_20260604_120000/`). Your model configuration and any manual edits are preserved in the backup.
+**Backup**: If agent files or `~/.config/opencode/opencode.json` already exist, the installer creates a timestamped backup before overwriting them (e.g., `~/.config/opencode/agent_backup_20260604_120000/`). Your model configuration, existing `opencode.json`, and any manual edits are preserved in the backup.
 
 Then it prompts you to optionally select a command profile for your stack:
 
@@ -370,16 +371,16 @@ It increases the allowed command surface compared to selecting a single profile.
 Example — Python profile adds to the `bash` block:
 
 ```yaml
-  # BEGIN optional profile: python
-  "pytest*": "allow"
-  "python -m pytest*": "allow"
-  "python3 -m pytest*": "allow"
-  "ruff check*": "allow"
-  "mypy*": "allow"
-  "pyright*": "allow"
-  "python -m unittest*": "allow"
-  "python3 -m unittest*": "allow"
-  # END optional profile: python
+    # BEGIN optional profile: python
+    "pytest*": "allow"
+    "python -m pytest*": "allow"
+    "python3 -m pytest*": "allow"
+    "ruff check*": "allow"
+    "mypy*": "allow"
+    "pyright*": "allow"
+    "python -m unittest*": "allow"
+    "python3 -m unittest*": "allow"
+    # END optional profile: python
 ```
 
 Profile markers prevent duplicate inserts if the installer is re-run. To apply a different profile, re-run `./install.sh`. To remove a profile, edit the installed agent files under `~/.config/opencode/agent/` and delete the lines between the `BEGIN` and `END` markers.
@@ -388,13 +389,13 @@ Profile markers prevent duplicate inserts if the installer is re-run. To apply a
 
 ### Adding project-specific validation commands
 
-Edit the installed agent files in `~/.config/opencode/agent/` and add patterns after the `"*": "ask"` catch-all and pipe/redirection patterns, but before the deny rules:
+Edit the installed agent files in `~/.config/opencode/agent/` and add patterns after the `"*": "ask"` catch-all, near the profile marker, but before the deny rules. opencode uses **last matching rule wins**, so broad defaults must appear before specific allow/deny rules:
 
 ```yaml
 bash:
   "*": "ask"
-  # ... pipe/redirection patterns ...
   # ... read-only inspection patterns ...
+  # Optional stack-specific profiles are inserted here by install.sh
   
   # Add your project-specific patterns here:
   "make test*": "allow"        # project-specific make target
@@ -405,7 +406,7 @@ bash:
 
 ### Adjusting scope
 
-- **Stricter**: Change `"*": "ask"` to `"*": "deny"` in bash permissions
+- **Stricter**: Change the initial catch-all default from `"*": "ask"` to `"*": "deny"`. More specific allow rules listed after it will still override the default because opencode uses last-match-wins.
 - **Looser**: Add more patterns to the allowlist
 - **Per-agent**: Edit only the agent file you want to change
 
@@ -445,8 +446,8 @@ Your agent prompt here...
 ### Permission errors
 
 - Check that bash patterns are quoted in YAML
-- Remember: insertion order matters (broad rules first, narrow rules last)
-- Use `"*": "ask"` as a safe catch-all
+- Remember: insertion order matters. opencode uses last-match-wins, so put broad rules first and narrow rules last.
+- Use `"*": "ask"` as the first bash rule for a safe default catch-all.
 
 ### Project-specific command asks for confirmation
 
@@ -458,7 +459,7 @@ Re-run `./install.sh` and select the desired profile. Or manually add the comman
 
 ### I lost my model configuration after re-running the installer
 
-The installer creates a timestamped backup before overwriting existing files (e.g., `~/.config/opencode/agent_backup_20260604_120000/`). Copy the `model:` field from the backed-up file back into the newly installed file.
+The installer creates a timestamped backup before overwriting existing files (e.g., `~/.config/opencode/agent_backup_20260604_120000/`). Copy the `model:` field from the backed-up agent file back into the newly installed file. If you had custom global settings, also review the backed-up `opencode.json`.
 
 ### Duplicate profile entries
 

@@ -20,135 +20,135 @@ TARGET_DIR="$HOME/.config/opencode"
 #                modify files. Formatter commands that write to disk are
 #                intentionally excluded from this variant.
 #
-# Snippets are inserted after `"* 2>/dev/null*": "allow"` (the last pipe/redirection
-# pattern) in the bash permission block. Markers prevent duplicate inserts on re-runs.
+# Snippets are inserted after the explicit profile marker in the bash permission
+# block. Markers prevent duplicate inserts on re-runs.
 # architect.md and spec.md have bash: deny and are never patched.
 # ---------------------------------------------------------------------------
 
 # --- JavaScript / TypeScript ------------------------------------------------
 # All commands here are read-only validation; both variants are identical.
-PROFILE_JAVASCRIPT_TYPESCRIPT_DEV='  # BEGIN optional profile: javascript-typescript
-  "npm test*": "allow"
-  "npm run test*": "allow"
-  "npm run lint*": "allow"
-  "npm run typecheck*": "allow"
-  "npm run check*": "allow"
-  "pnpm test*": "allow"
-  "pnpm lint*": "allow"
-  "pnpm typecheck*": "allow"
-  "pnpm check*": "allow"
-  "yarn test*": "allow"
-  "yarn lint*": "allow"
-  "yarn typecheck*": "allow"
-  "yarn check*": "allow"
-  "npx jest*": "allow"
-  "npx vitest*": "allow"
-  "npx tsc*": "allow"
-  "npx eslint*": "allow"
-  "npx prettier --check*": "allow"
-  # END optional profile: javascript-typescript'
+PROFILE_JAVASCRIPT_TYPESCRIPT_DEV='    # BEGIN optional profile: javascript-typescript
+    "npm test*": "allow"
+    "npm run test*": "allow"
+    "npm run lint*": "allow"
+    "npm run typecheck*": "allow"
+    "npm run check*": "allow"
+    "pnpm test*": "allow"
+    "pnpm lint*": "allow"
+    "pnpm typecheck*": "allow"
+    "pnpm check*": "allow"
+    "yarn test*": "allow"
+    "yarn lint*": "allow"
+    "yarn typecheck*": "allow"
+    "yarn check*": "allow"
+    "npx jest*": "allow"
+    "npx vitest*": "allow"
+    "npx tsc*": "allow"
+    "npx eslint*": "allow"
+    "npx prettier --check*": "allow"
+    # END optional profile: javascript-typescript'
 PROFILE_JAVASCRIPT_TYPESCRIPT_READONLY="$PROFILE_JAVASCRIPT_TYPESCRIPT_DEV"
 
 # --- Python -----------------------------------------------------------------
 # All commands here are read-only validation; both variants are identical.
-PROFILE_PYTHON_DEV='  # BEGIN optional profile: python
-  "pytest*": "allow"
-  "python -m pytest*": "allow"
-  "python3 -m pytest*": "allow"
-  "ruff check*": "allow"
-  "mypy*": "allow"
-  "pyright*": "allow"
-  "python -m unittest*": "allow"
-  "python3 -m unittest*": "allow"
-  # END optional profile: python'
+PROFILE_PYTHON_DEV='    # BEGIN optional profile: python
+    "pytest*": "allow"
+    "python -m pytest*": "allow"
+    "python3 -m pytest*": "allow"
+    "ruff check*": "allow"
+    "mypy*": "allow"
+    "pyright*": "allow"
+    "python -m unittest*": "allow"
+    "python3 -m unittest*": "allow"
+    # END optional profile: python'
 PROFILE_PYTHON_READONLY="$PROFILE_PYTHON_DEV"
 
 # --- Go ---------------------------------------------------------------------
 # Developer variant includes go fmt (mutates files) listed as ask.
 # Read-only variant omits go fmt / gofmt to preserve Auditor/Reviewer safety.
-PROFILE_GO_DEV='  # BEGIN optional profile: go
-  "go test*": "allow"
-  "go vet*": "allow"
-  "go fmt*": "ask"
-  "gofmt*": "ask"
-  # END optional profile: go'
-PROFILE_GO_READONLY='  # BEGIN optional profile: go
-  "go test*": "allow"
-  "go vet*": "allow"
-  # END optional profile: go'
+PROFILE_GO_DEV='    # BEGIN optional profile: go
+    "go test*": "allow"
+    "go vet*": "allow"
+    "go fmt*": "ask"
+    "gofmt*": "ask"
+    # END optional profile: go'
+PROFILE_GO_READONLY='    # BEGIN optional profile: go
+    "go test*": "allow"
+    "go vet*": "allow"
+    # END optional profile: go'
 
 # --- Rust -------------------------------------------------------------------
 # Developer variant includes cargo fmt (mutates files) listed as ask.
 # cargo fmt --check is safe for both roles; cargo fmt (without --check) is dev-only.
-PROFILE_RUST_DEV='  # BEGIN optional profile: rust
-  "cargo test*": "allow"
-  "cargo check*": "allow"
-  "cargo clippy*": "allow"
-  "cargo fmt --check*": "allow"
-  "cargo fmt*": "ask"
-  # END optional profile: rust'
-PROFILE_RUST_READONLY='  # BEGIN optional profile: rust
-  "cargo test*": "allow"
-  "cargo check*": "allow"
-  "cargo clippy*": "allow"
-  "cargo fmt --check*": "allow"
-  # END optional profile: rust'
+PROFILE_RUST_DEV='    # BEGIN optional profile: rust
+    "cargo test*": "allow"
+    "cargo check*": "allow"
+    "cargo clippy*": "allow"
+    "cargo fmt*": "ask"
+    "cargo fmt --check*": "allow"
+    # END optional profile: rust'
+PROFILE_RUST_READONLY='    # BEGIN optional profile: rust
+    "cargo test*": "allow"
+    "cargo check*": "allow"
+    "cargo clippy*": "allow"
+    "cargo fmt --check*": "allow"
+    # END optional profile: rust'
 
 # --- Swift ------------------------------------------------------------------
 # Developer variant includes swift build and swift format (both may write
 # artifacts or reformat files) listed as ask.
 # Read-only variant includes only swift test and swift format lint (check mode).
-PROFILE_SWIFT_DEV='  # BEGIN optional profile: swift
-  "swift test*": "allow"
-  "swift build*": "ask"
-  "swift format lint*": "allow"
-  "swift format*": "ask"
-  "xcodebuild test*": "ask"
-  # END optional profile: swift'
-PROFILE_SWIFT_READONLY='  # BEGIN optional profile: swift
-  "swift test*": "allow"
-  "swift format lint*": "allow"
-  # END optional profile: swift'
+PROFILE_SWIFT_DEV='    # BEGIN optional profile: swift
+    "swift test*": "allow"
+    "swift build*": "ask"
+    "swift format*": "ask"
+    "swift format lint*": "allow"
+    "xcodebuild test*": "ask"
+    # END optional profile: swift'
+PROFILE_SWIFT_READONLY='    # BEGIN optional profile: swift
+    "swift test*": "allow"
+    "swift format lint*": "allow"
+    # END optional profile: swift'
 
 # --- Java / Kotlin ----------------------------------------------------------
 # All commands here are read-only validation; both variants are identical.
-PROFILE_JAVA_KOTLIN_DEV='  # BEGIN optional profile: java-kotlin
-  "./gradlew test*": "allow"
-  "./gradlew check*": "allow"
-  "./gradlew ktlintCheck*": "allow"
-  "./gradlew detekt*": "allow"
-  "gradle test*": "allow"
-  "gradle check*": "allow"
-  "mvn test*": "allow"
-  "mvn verify*": "allow"
-  # END optional profile: java-kotlin'
+PROFILE_JAVA_KOTLIN_DEV='    # BEGIN optional profile: java-kotlin
+    "./gradlew test*": "allow"
+    "./gradlew check*": "allow"
+    "./gradlew ktlintCheck*": "allow"
+    "./gradlew detekt*": "allow"
+    "gradle test*": "allow"
+    "gradle check*": "allow"
+    "mvn test*": "allow"
+    "mvn verify*": "allow"
+    # END optional profile: java-kotlin'
 PROFILE_JAVA_KOTLIN_READONLY="$PROFILE_JAVA_KOTLIN_DEV"
 
 # --- Ruby -------------------------------------------------------------------
 # All commands here are read-only validation; both variants are identical.
-PROFILE_RUBY_DEV='  # BEGIN optional profile: ruby
-  "bundle exec rspec*": "allow"
-  "bundle exec rubocop*": "allow"
-  "ruby -c*": "allow"
-  "rails test*": "allow"
-  # END optional profile: ruby'
+PROFILE_RUBY_DEV='    # BEGIN optional profile: ruby
+    "bundle exec rspec*": "allow"
+    "bundle exec rubocop*": "allow"
+    "ruby -c*": "allow"
+    "rails test*": "allow"
+    # END optional profile: ruby'
 PROFILE_RUBY_READONLY="$PROFILE_RUBY_DEV"
 
 # --- PHP --------------------------------------------------------------------
 # All commands here are read-only validation; both variants are identical.
-PROFILE_PHP_DEV='  # BEGIN optional profile: php
-  "composer test*": "allow"
-  "vendor/bin/phpunit*": "allow"
-  "vendor/bin/phpstan*": "allow"
-  "vendor/bin/psalm*": "allow"
-  "vendor/bin/phpcs*": "allow"
-  # END optional profile: php'
+PROFILE_PHP_DEV='    # BEGIN optional profile: php
+    "composer test*": "allow"
+    "vendor/bin/phpunit*": "allow"
+    "vendor/bin/phpstan*": "allow"
+    "vendor/bin/psalm*": "allow"
+    "vendor/bin/phpcs*": "allow"
+    # END optional profile: php'
 PROFILE_PHP_READONLY="$PROFILE_PHP_DEV"
 
 # ---------------------------------------------------------------------------
 # Helper: insert a profile snippet into a single agent file.
 # Skips insertion if the BEGIN marker already exists (idempotent).
-# Inserts the snippet immediately after the line matching `"* 2>/dev/null*": "allow"`.
+# Inserts the snippet immediately after the profile marker comment.
 # ---------------------------------------------------------------------------
 insert_profile() {
   local file="$1"
@@ -168,8 +168,8 @@ insert_profile() {
 
   local tmpfile
   tmpfile=$(mktemp)
-  awk -v snippet_file="$snippet_file" '
-    /^[[:space:]]*"\* 2>\/dev\/null\*": "allow"/ && !inserted {
+  if ! awk -v snippet_file="$snippet_file" '
+    /^[[:space:]]*# Optional stack-specific profiles are inserted here by install\.sh$/ && !inserted {
       print
       while ((getline line < snippet_file) > 0) {
         print line
@@ -179,7 +179,12 @@ insert_profile() {
       next
     }
     { print }
-  ' "$file" > "$tmpfile"
+    END { if (!inserted) exit 42 }
+  ' "$file" > "$tmpfile"; then
+    rm -f "$tmpfile" "$snippet_file"
+    echo "   ✗ Could not insert profile into $file: profile marker not found" >&2
+    return 1
+  fi
   mv "$tmpfile" "$file"
   rm -f "$snippet_file"
 }
@@ -198,9 +203,18 @@ apply_profile() {
   local auditor="$TARGET_DIR/agent/auditor.md"
   local reviewer="$TARGET_DIR/agent/reviewer.md"
 
-  [ -f "$dev" ]      && insert_profile "$dev"      "$dev_snippet"      && echo "   ✓ developer.md — $label"
-  [ -f "$auditor" ]  && insert_profile "$auditor"  "$readonly_snippet" && echo "   ✓ auditor.md — $label (read-only subset)"
-  [ -f "$reviewer" ] && insert_profile "$reviewer" "$readonly_snippet" && echo "   ✓ reviewer.md — $label (read-only subset)"
+  if [ -f "$dev" ]; then
+    insert_profile "$dev" "$dev_snippet"
+    echo "   ✓ developer.md — $label"
+  fi
+  if [ -f "$auditor" ]; then
+    insert_profile "$auditor" "$readonly_snippet"
+    echo "   ✓ auditor.md — $label (read-only subset)"
+  fi
+  if [ -f "$reviewer" ]; then
+    insert_profile "$reviewer" "$readonly_snippet"
+    echo "   ✓ reviewer.md — $label (read-only subset)"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -256,6 +270,9 @@ mkdir -p "$TARGET_DIR/agent"
 # Backup existing agent files before overwriting
 BACKUP_DIR="$TARGET_DIR/agent_backup_$(date +%Y%m%d_%H%M%S)"
 backup_needed=false
+if [ -f "$TARGET_DIR/opencode.json" ]; then
+  backup_needed=true
+fi
 for agent_file in "$SCRIPT_DIR/agent"/*.md; do
   agent_name=$(basename "$agent_file")
   if [ -f "$TARGET_DIR/agent/$agent_name" ]; then
@@ -266,7 +283,8 @@ done
 if [ "$backup_needed" = true ]; then
   mkdir -p "$BACKUP_DIR"
   cp "$TARGET_DIR/agent/"*.md "$BACKUP_DIR/" 2>/dev/null || true
-  echo "💾 Existing agent files backed up to:"
+  cp "$TARGET_DIR/opencode.json" "$BACKUP_DIR/opencode.json" 2>/dev/null || true
+  echo "💾 Existing config files backed up to:"
   echo "   $BACKUP_DIR"
   echo ""
 fi

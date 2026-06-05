@@ -3,11 +3,11 @@ description: Designs system architecture and produces structured design decision
 mode: primary
 permission:
   edit:
-    "*plan*.md": "allow"
     "*": "deny"
+    "*plan*.md": "allow"
   write:
-    "*plan*.md": "allow"
     "*": "deny"
+    "*plan*.md": "allow"
   bash: deny
   task: allow
 ---

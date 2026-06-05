@@ -8,15 +8,6 @@ permission:
     # Default: ask for anything not explicitly allowed or denied
     "*": "ask"
 
-    # Pipes and redirections to read-only tools (allows truncation/filtering of output)
-    "* | tail*": "allow"
-    "* | head*": "allow"
-    "* | wc*": "allow"
-    "* | grep*": "allow"
-    "* | rg*": "allow"
-    "* 2>&1*": "allow"
-    "* 2>/dev/null*": "allow"
-
     # Universal read-only inspection
     "pwd": "allow"
     "ls*": "allow"
@@ -28,6 +19,8 @@ permission:
     "tail *": "allow"
     "wc *": "allow"
     "sed -n *": "allow"
+
+    # Optional stack-specific profiles are inserted here by install.sh
 
     # Git read-only inspection
     "git status*": "allow"
@@ -65,6 +58,13 @@ permission:
     "kubectl apply*": "deny"
     "terraform apply*": "deny"
     "pulumi up*": "deny"
+
+    # Shell compound/evaluation operators are denied to prevent bypassing rules
+    "*;*": "deny"
+    "*&&*": "deny"
+    "*||*": "deny"
+    "*`*": "deny"
+    "*$(*": "deny"
   task: allow
 ---
 
@@ -97,7 +97,7 @@ You are read-only: no file edits, no mutating commands.
 
 Read-only inspection (allowed without asking): file listing, text search, reading files, counting lines, git status/diff/log/show/blame.
 
-Project-specific validation (tests, linters, type checks, builds): requires user confirmation. Look for documented commands in README, CI config, or build files. Ask with the exact command and reason. Do not claim validation was performed unless you ran it or the user declined.
+Project-specific validation (tests, linters, type checks, builds): requires user confirmation unless the command is already allowlisted by the permission policy or installed profile. Look for documented commands in README, CI config, or build files. Ask with the exact command and reason when confirmation is required. Do not claim validation was performed unless you ran it or the user declined.
 
 - Do not write code or modify files. You find problems; Developer fixes them.
 - Do not propose alternative architectures. That is Architect's job. You find flaws in the existing one.

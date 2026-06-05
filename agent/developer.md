@@ -8,15 +8,6 @@ permission:
     # Default: ask for anything not explicitly allowed or denied
     "*": "ask"
 
-    # Pipes and redirections to read-only tools (allows truncation/filtering of output)
-    "* | tail*": "allow"
-    "* | head*": "allow"
-    "* | wc*": "allow"
-    "* | grep*": "allow"
-    "* | rg*": "allow"
-    "* 2>&1*": "allow"
-    "* 2>/dev/null*": "allow"
-
     # Universal read-only inspection
     "pwd": "allow"
     "ls*": "allow"
@@ -28,6 +19,8 @@ permission:
     "tail *": "allow"
     "wc *": "allow"
     "sed -n *": "allow"
+
+    # Optional stack-specific profiles are inserted here by install.sh
 
     # Git read-only inspection
     "git status*": "allow"
@@ -76,6 +69,13 @@ permission:
     "kubectl apply*": "deny"
     "terraform apply*": "deny"
     "pulumi up*": "deny"
+
+    # Shell compound/evaluation operators are denied to prevent bypassing rules
+    "*;*": "deny"
+    "*&&*": "deny"
+    "*||*": "deny"
+    "*`*": "deny"
+    "*$(*": "deny"
   task: allow
 ---
 
