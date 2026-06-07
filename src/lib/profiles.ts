@@ -13,7 +13,7 @@ import { join } from "node:path";
 //              modify files. Formatter commands that write to disk are
 //              intentionally excluded from this variant.
 //
-// Profile entries are the canonical definitions used by oc-workflow profiles.
+// Profile entries are the canonical definitions used by opencode-path profiles.
 // ---------------------------------------------------------------------------
 
 export interface ProfileEntry {
@@ -231,6 +231,14 @@ const INDENT = "    ";
  * Must match the marker in the agent template files.
  */
 export const PROFILE_MARKER =
+  "# Optional stack-specific profiles are inserted here by opencode-path profiles";
+
+/**
+ * Legacy marker from the previous CLI name. Kept for backward compatibility
+ * so that `opencode-path profiles` still works on agent files installed by
+ * the old `oc-workflow` CLI.
+ */
+const LEGACY_PROFILE_MARKER =
   "# Optional stack-specific profiles are inserted here by oc-workflow profiles";
 
 /**
@@ -328,15 +336,26 @@ export function insertProfileIntoFile(
 
   const lines = content.split("\n");
   let markerIndex = -1;
+  let isLegacyMarker = false;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].includes(PROFILE_MARKER)) {
       markerIndex = i;
+      break;
+    }
+    if (lines[i].includes(LEGACY_PROFILE_MARKER)) {
+      markerIndex = i;
+      isLegacyMarker = true;
       break;
     }
   }
 
   if (markerIndex === -1) {
     return { inserted: false, reason: "marker_not_found" };
+  }
+
+  // Migrate legacy marker to current marker
+  if (isLegacyMarker) {
+    lines[markerIndex] = lines[markerIndex].replace(LEGACY_PROFILE_MARKER, PROFILE_MARKER);
   }
 
   const entries = variant === "dev" ? profile.dev : profile.readonly;

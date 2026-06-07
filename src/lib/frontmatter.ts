@@ -123,7 +123,7 @@ export function setAgentModel(
     content = readFileSync(templatePath, "utf-8");
   } else {
     throw new Error(
-      `Agent file not found: ${filePath}. Run 'oc-workflow init' first.`
+      `Agent file not found: ${filePath}. Run 'opencode-path init' first.`
     );
   }
 

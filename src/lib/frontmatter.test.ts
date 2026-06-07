@@ -75,7 +75,7 @@ permission:
     "pwd": "allow"
     "ls*": "allow"
 
-    # Optional stack-specific profiles are inserted here by oc-workflow profiles
+    # Optional stack-specific profiles are inserted here by opencode-path profiles
 
     # Git read-only inspection
     "git status*": "allow"
@@ -100,7 +100,7 @@ permission:
   write: allow
   bash:
     "*": "ask"
-    # Optional stack-specific profiles are inserted here by oc-workflow profiles
+    # Optional stack-specific profiles are inserted here by opencode-path profiles
     # BEGIN optional profile: python
     "pytest*": "allow"
     "mypy*": "allow"
@@ -288,7 +288,7 @@ describe("setAgentModel", () => {
     // Comments must be preserved
     expect(content).toContain("# Default: ask for anything not explicitly allowed or denied");
     expect(content).toContain("# Universal read-only inspection");
-    expect(content).toContain("# Optional stack-specific profiles are inserted here by oc-workflow profiles");
+    expect(content).toContain("# Optional stack-specific profiles are inserted here by opencode-path profiles");
     expect(content).toContain("# Git read-only inspection");
     expect(content).toContain("# Shell compound operators are denied");
     // Model must be set
@@ -303,7 +303,7 @@ describe("setAgentModel", () => {
 
     const content = readFileSync(filePath, "utf-8");
     // Profile marker must be preserved
-    expect(content).toContain("# Optional stack-specific profiles are inserted here by oc-workflow profiles");
+    expect(content).toContain("# Optional stack-specific profiles are inserted here by opencode-path profiles");
     // Profile block must be preserved
     expect(content).toContain("# BEGIN optional profile: python");
     expect(content).toContain('"pytest*": "allow"');
@@ -387,7 +387,7 @@ describe("setModelInContent", () => {
   it("preserves comments in the frontmatter", () => {
     const result = setModelInContent(AGENT_WITH_COMMENTS_AND_MARKER, "openai/gpt-5.5");
     expect(result).toContain("# Default: ask for anything not explicitly allowed or denied");
-    expect(result).toContain("# Optional stack-specific profiles are inserted here by oc-workflow profiles");
+    expect(result).toContain("# Optional stack-specific profiles are inserted here by opencode-path profiles");
   });
 
   it("preserves profile blocks (# BEGIN/# END)", () => {

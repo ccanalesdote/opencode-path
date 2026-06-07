@@ -40,10 +40,10 @@ function hasPatchableAgents(target: { agentDir: string }): boolean {
 }
 
 /**
- * Run the `oc-workflow profiles` command.
+ * Run the `opencode-path profiles` command.
  */
 export async function profilesCommand(): Promise<void> {
-  console.log(pc.bold("\n🧩 OpenCode Workflow Stack Profiles\n"));
+  console.log(pc.bold("\n🧩 OpenCode Path Stack Profiles\n"));
 
   // Step 1: Detect/select install target
   const defaultScope = detectDefaultScope();
@@ -58,7 +58,7 @@ export async function profilesCommand(): Promise<void> {
   if (!hasProjectAgents && !hasGlobalAgents) {
     console.log(
       pc.red(
-        `\n   No installed agent files found. Run ${pc.cyan("oc-workflow init")} first.\n`
+        `\n   No installed agent files found. Run ${pc.cyan("opencode-path init")} first.\n`
       )
     );
     return;

@@ -1,10 +1,10 @@
 {
-  "name": "oc-workflow",
+  "name": "opencode-path",
   "version": "0.1.0",
   "description": "Structured multi-agent workflow CLI for opencode",
   "type": "module",
   "bin": {
-    "oc-workflow": "./dist/cli.js"
+    "opencode-path": "./dist/cli.js"
   },
   "files": [
     "dist",

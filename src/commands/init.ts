@@ -13,10 +13,10 @@ interface InstallResult {
 }
 
 /**
- * Run the `oc-workflow init` command.
+ * Run the `opencode-path init` command.
  */
 export async function initCommand(): Promise<void> {
-  console.log(pc.bold("\n🔧 OpenCode Workflow Installer\n"));
+  console.log(pc.bold("\n🔧 OpenCode Path Installer\n"));
 
   // Step 1: Target selection
   const defaultScope = detectDefaultScope();
@@ -114,7 +114,7 @@ export async function initCommand(): Promise<void> {
 
   console.log(
     pc.bold(
-      `\n📌 Next step: Configure models with ${pc.cyan("oc-workflow models")}`
+      `\n📌 Next step: Configure models with ${pc.cyan("opencode-path models")}`
     )
   );
   console.log(

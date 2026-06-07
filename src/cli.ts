@@ -8,7 +8,7 @@ import { profilesCommand } from "./commands/profiles.js";
 const program = new Command();
 
 program
-  .name("oc-workflow")
+  .name("opencode-path")
   .description("Structured multi-agent workflow CLI for opencode")
   .version("0.1.0");
 

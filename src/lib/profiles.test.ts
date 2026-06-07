@@ -44,6 +44,26 @@ permission:
     "*": "ask"
     "pwd": "allow"
     "ls*": "allow"
+    # Optional stack-specific profiles are inserted here by opencode-path profiles
+
+    "git status*": "allow"
+  task: allow
+---
+
+You are Test agent.
+`;
+
+// Agent file with legacy oc-workflow marker (backward compatibility)
+const AGENT_WITH_LEGACY_MARKER = `---
+description: Test agent
+mode: primary
+permission:
+  edit: allow
+  write: allow
+  bash:
+    "*": "ask"
+    "pwd": "allow"
+    "ls*": "allow"
     # Optional stack-specific profiles are inserted here by oc-workflow profiles
 
     "git status*": "allow"
@@ -485,5 +505,27 @@ describe("applyProfileToAgents", () => {
 
     const auditor = result.files.find((f) => f.agent === "auditor")!;
     expect(auditor.status).toBe("inserted");
+  });
+
+  it("inserts a profile into a file with the legacy oc-workflow marker", () => {
+    const filePath = fixturePath("legacy-marker.md");
+    writeFileSync(filePath, AGENT_WITH_LEGACY_MARKER, "utf-8");
+
+    const profile = getProfile("python")!;
+    const result = insertProfileIntoFile(filePath, profile, "dev");
+
+    expect(result.inserted).toBe(true);
+
+    const content = readFileSync(filePath, "utf-8");
+    // Profile should be inserted
+    expect(content).toContain("# BEGIN optional profile: python");
+    expect(content).toContain('"pytest*": "allow"');
+    expect(content).toContain("# END optional profile: python");
+    // Legacy marker should be migrated to current marker
+    expect(content).toContain(PROFILE_MARKER);
+    expect(content).not.toContain("oc-workflow profiles");
+    // Original content preserved
+    expect(content).toContain("You are Test agent.");
+    expect(content).toContain('"git status*": "allow"');
   });
 });

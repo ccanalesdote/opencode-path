@@ -1,4 +1,4 @@
-# OpenCode Workflow
+# OpenCode Path
 
 A structured multi-agent workflow for [opencode](https://opencode.ai) that separates concerns, minimizes blast radius, and optimizes model usage by role.
 
@@ -22,8 +22,8 @@ This workflow defines 6 specialized agents with clear responsibilities:
 2. **Separation of Concerns**: Clarify (Spec) → Research (Research) → Design (Architect) → Implement (Developer) → Review (Reviewer) → Audit (Auditor).
 3. **Cross-Session Planning**: Architect produces self-contained briefs for implementation in new sessions.
 4. **Granular Permissions**: Risk-based bash policy for Developer; scoped read-only inspection for Auditor and Reviewer.
-5. **Model-Agnostic by Default**: No models are hardcoded. Use `oc-workflow models` to configure models explicitly for each agent.
-6. **Stack Profiles via Opt-In Command**: The CLI installs agnostic agent templates by default. Stack-specific permission profiles (test runners, linters, type checkers) are added separately via `oc-workflow profiles`, keeping the base install clean and technology-agnostic.
+5. **Model-Agnostic by Default**: No models are hardcoded. Use `opencode-path models` to configure models explicitly for each agent.
+6. **Stack Profiles via Opt-In Command**: The CLI installs agnostic agent templates by default. Stack-specific permission profiles (test runners, linters, type checkers) are added separately via `opencode-path profiles`, keeping the base install clean and technology-agnostic.
 
 ## Installation
 
@@ -31,14 +31,14 @@ This workflow defines 6 specialized agents with clear responsibilities:
 
 ```bash
 # Install globally
-npm install -g oc-workflow
+npm install -g opencode-path
 
 # Or run directly with npx
-npx oc-workflow init
+npx opencode-path init
 
 # Or install from source
 git clone <your-repo-url>
-cd opencode-workflow
+cd opencode-path
 npm install
 npm run build
 node dist/cli.js init
@@ -48,7 +48,7 @@ node dist/cli.js init
 
 ```bash
 # Initialize the pack into your project or global config
-oc-workflow init
+opencode-path init
 ```
 
 The `init` command prompts you to choose between:
@@ -67,14 +67,14 @@ Installed files:
 
 If any agent file already exists, `init` will ask whether to overwrite it on a per-file basis. If you decline, the existing file is kept and the rest continue installing.
 
-The `init` command installs technology-agnostic agent templates without any model configured. To set up models, run `oc-workflow models` after init. To add stack-specific validation commands (test runners, linters, type checkers), run `oc-workflow profiles` after init.
+The `init` command installs technology-agnostic agent templates without any model configured. To set up models, run `opencode-path models` after init. To add stack-specific validation commands (test runners, linters, type checkers), run `opencode-path profiles` after init.
 
 **Restart opencode** after installation.
 
 ### Configure models
 
 ```bash
-oc-workflow models
+opencode-path models
 ```
 
 The `models` command lets you select an agent and choose from the models exposed by OpenCode:
@@ -106,7 +106,7 @@ The `models` command runs in a loop — after setting a model for one agent, it 
 ### Apply stack profiles
 
 ```bash
-oc-workflow profiles
+opencode-path profiles
 ```
 
 The `profiles` command shows a list of available stack profiles and lets you select one or more to apply. Profiles are inserted into the agent files at a designated marker line using idempotency markers, so re-running the command does not duplicate blocks. See [Stack Profiles](#stack-profiles) below.
@@ -128,10 +128,10 @@ The `profiles` command shows a list of available stack profiles and lets you sel
 ### Example full configuration
 
 ```bash
-oc-workflow init
+opencode-path init
 # Choose: Project .opencode/
 
-oc-workflow models
+opencode-path models
 # Select: architect → anthropic/claude-sonnet-4-6
 # Select: developer → anthropic/claude-sonnet-4-6
 # Select: auditor → anthropic/claude-sonnet-4-6
@@ -140,7 +140,7 @@ oc-workflow models
 # Select: research → anthropic/claude-haiku-4-5
 # Select: explore → anthropic/claude-haiku-4-5
 
-oc-workflow profiles
+opencode-path profiles
 # Select: Python, JavaScript / TypeScript, etc.
 
 # Restart opencode to apply all changes
@@ -397,10 +397,10 @@ What this explicitly does not cover.
 
 ## Stack Profiles
 
-After running `oc-workflow init`, you can add stack-specific permission profiles to the installed agent files:
+After running `opencode-path init`, you can add stack-specific permission profiles to the installed agent files:
 
 ```bash
-oc-workflow profiles
+opencode-path profiles
 ```
 
 The `profiles` command shows a list of available stack profiles and lets you select one or more to apply. Profiles are inserted into the agent files at a designated marker line using idempotency markers, so re-running the command does not duplicate blocks.
@@ -471,7 +471,7 @@ Example — Python profile adds to the `bash` block:
 
 Profile markers prevent duplicate inserts on re-runs. If a profile block with the same name already exists in an agent file, it will be skipped without changes. To remove a profile, edit the installed agent files and delete the lines between the `BEGIN` and `END` markers.
 
-If the marker line (`# Optional stack-specific profiles are inserted here by oc-workflow profiles`) has been removed from an agent file, the `profiles` command will report an error for that file rather than guessing where to insert.
+If the marker line (`# Optional stack-specific profiles are inserted here by opencode-path profiles`) has been removed from an agent file, the `profiles` command will report an error for that file rather than guessing where to insert.
 
 ### External-impact command denylist
 
@@ -494,8 +494,8 @@ Edit the installed agent files and add patterns after the profile blocks (or aft
 bash:
   "*": "ask"
   # ... read-only inspection patterns ...
-  # Optional stack-specific profiles are inserted here by oc-workflow profiles
-  # (profile blocks appear here after running oc-workflow profiles)
+  # Optional stack-specific profiles are inserted here by opencode-path profiles
+  # (profile blocks appear here after running opencode-path profiles)
   
   # Add your project-specific patterns here:
   "make test*": "allow"        # project-specific make target
@@ -576,11 +576,11 @@ npx tsc --noEmit
 
 ### Project-specific command asks for confirmation
 
-Run `oc-workflow profiles` to add stack-specific validation commands. If a command still asks for confirmation after applying the relevant profile, you can add it to the agent file's bash section.
+Run `opencode-path profiles` to add stack-specific validation commands. If a command still asks for confirmation after applying the relevant profile, you can add it to the agent file's bash section.
 
 ### I lost my model configuration after re-running init
 
-`oc-workflow init` asks per file whether to overwrite. If you decline, the existing file with its model configuration is preserved.
+`opencode-path init` asks per file whether to overwrite. If you decline, the existing file with its model configuration is preserved.
 
 ### Agent behavior issues
 

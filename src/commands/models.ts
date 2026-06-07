@@ -121,10 +121,10 @@ async function promptModelFromOpenCode(
 }
 
 /**
- * Run the `oc-workflow models` command.
+ * Run the `opencode-path models` command.
  */
 export async function modelsCommand(): Promise<void> {
-  console.log(pc.bold("\n🎯 OpenCode Workflow Model Configuration\n"));
+  console.log(pc.bold("\n🎯 OpenCode Path Model Configuration\n"));
 
   // Step 1: Detect target
   const defaultScope = detectDefaultScope();
@@ -162,7 +162,7 @@ export async function modelsCommand(): Promise<void> {
   if (!hasInstalledAgents(target) && !hasInstalledAgents(resolveTarget("global"))) {
     console.log(
       pc.red(
-        `\n   No installed agents found. Run ${pc.cyan("oc-workflow init")} first.\n`
+        `\n   No installed agents found. Run ${pc.cyan("opencode-path init")} first.\n`
       )
     );
     return;
@@ -218,7 +218,7 @@ export async function modelsCommand(): Promise<void> {
         );
         console.log(
           pc.yellow(
-            `   Run ${pc.cyan("oc-workflow init")} for the ${scope} target first.\n`
+            `   Run ${pc.cyan("opencode-path init")} for the ${scope} target first.\n`
           )
         );
         const continueAnyway = await confirm({
