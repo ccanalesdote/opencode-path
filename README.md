@@ -4,7 +4,7 @@ A structured multi-agent workflow for [opencode](https://opencode.ai) that separ
 
 ## Overview
 
-This workflow defines 5 specialized agents with clear responsibilities:
+This workflow defines 6 specialized agents with clear responsibilities:
 
 | Agent | Role | Mode | Permissions |
 |-------|------|------|-------------|
@@ -12,65 +12,108 @@ This workflow defines 5 specialized agents with clear responsibilities:
 | **Architect** | Designs system architecture, produces structured design decisions | Primary | Read-only + write `*plan*.md` |
 | **Developer** | Implements code changes end-to-end | Primary | Edit/write + risk-based bash policy |
 | **Auditor** | Audits existing work for failures, risks, and gaps | Primary | Read-only + inspection commands + confirmation for project-specific validation |
+| **Research** | Researches documentation, APIs, SDK behavior, and best practices | Primary | Read-only, no bash |
 | **Reviewer** | Reviews code changes, returns PASS/FAIL verdict | Subagent | Read-only + inspection commands + confirmation for project-specific validation |
 | **Explore** | Fast codebase exploration | Subagent (built-in) | Read-only |
 
 ### Key Design Principles
 
 1. **Blast Radius Minimization**: Only Developer can modify files. All other agents are read-only.
-2. **Separation of Concerns**: Clarify (Spec) → Design (Architect) → Implement (Developer) → Review (Reviewer) → Audit (Auditor).
+2. **Separation of Concerns**: Clarify (Spec) → Research (Research) → Design (Architect) → Implement (Developer) → Review (Reviewer) → Audit (Auditor).
 3. **Cross-Session Planning**: Architect produces self-contained briefs for implementation in new sessions.
 4. **Granular Permissions**: Risk-based bash policy for Developer; scoped read-only inspection for Auditor and Reviewer.
-5. **Technology Agnosticism**: The base workflow does not assume a language, package manager, test runner, formatter, linter, or build system. Project-specific commands are opt-in through confirmation, local customization, or optional install-time profiles.
+5. **Model-Agnostic by Default**: No models are hardcoded. Use `oc-workflow models` to configure models explicitly for each agent.
+6. **Stack Profiles via Opt-In Command**: The CLI installs agnostic agent templates by default. Stack-specific permission profiles (test runners, linters, type checkers) are added separately via `oc-workflow profiles`, keeping the base install clean and technology-agnostic.
 
 ## Installation
 
+### Install the CLI
+
 ```bash
-# Clone this repository
+# Install globally
+npm install -g oc-workflow
+
+# Or run directly with npx
+npx oc-workflow init
+
+# Or install from source
 git clone <your-repo-url>
 cd opencode-workflow
-
-# Run the installer
-chmod +x install.sh
-./install.sh
+npm install
+npm run build
+node dist/cli.js init
 ```
 
-The installer copies files to `~/.config/opencode/`:
-- `opencode.json` — global config with Explore override
-- `agent/architect.md` — Architect agent
-- `agent/auditor.md` — Auditor agent
-- `agent/developer.md` — Developer agent
-- `agent/reviewer.md` — Reviewer agent
+### Install the workflow pack
+
+```bash
+# Initialize the pack into your project or global config
+oc-workflow init
+```
+
+The `init` command prompts you to choose between:
+
+- **Project install**: writes to `./.opencode/agent/` and `./.opencode/opencode.json`
+- **Global install**: writes to `~/.config/opencode/agent/` and `~/.config/opencode/opencode.json`
+
+Installed files:
 - `agent/spec.md` — Spec agent
+- `agent/architect.md` — Architect agent
+- `agent/developer.md` — Developer agent
+- `agent/auditor.md` — Auditor agent
+- `agent/reviewer.md` — Reviewer agent
+- `agent/research.md` — Research agent
+- `opencode.json` — OpenCode config with Explore override
 
-**Backup**: If agent files or `~/.config/opencode/opencode.json` already exist, the installer creates a timestamped backup before overwriting them (e.g., `~/.config/opencode/agent_backup_20260604_120000/`). Your model configuration, existing `opencode.json`, and any manual edits are preserved in the backup.
+If any agent file already exists, `init` will ask whether to overwrite it on a per-file basis. If you decline, the existing file is kept and the rest continue installing.
 
-Then it prompts you to optionally select a command profile for your stack:
-
-```
-Optional command profile:
-  1) None — technology-agnostic default (recommended)
-  2) JavaScript / TypeScript
-  3) Python
-  4) Go
-  5) Rust
-  6) Swift
-  7) Java / Kotlin
-  8) Ruby
-  9) PHP
- 10) All stacks — broad convenience mode
-     (enables all validation profiles; useful for multi-stack projects)
-```
-
-Profiles are applied only to the installed files under `~/.config/opencode/agent/`. The repository source files remain technology-agnostic. If you select "None", the default conservative policy applies and project-specific commands will ask for confirmation.
+The `init` command installs technology-agnostic agent templates without any model configured. To set up models, run `oc-workflow models` after init. To add stack-specific validation commands (test runners, linters, type checkers), run `oc-workflow profiles` after init.
 
 **Restart opencode** after installation.
 
-## Model Configuration
+### Configure models
 
-This workflow is **model-agnostic**. You must configure models for each agent based on your needs and budget.
+```bash
+oc-workflow models
+```
 
-### Recommended Strategy
+The `models` command lets you select an agent and choose from the models exposed by OpenCode:
+
+```bash
+opencode models
+```
+
+If OpenCode cannot provide a model list, or if you need a model that is not listed, choose `Custom model...` and enter the model ID manually. It supports all seven agents:
+
+| Agent | Where the model is stored | Example model |
+|-------|--------------------------|----------------|
+| spec | `agent/spec.md` frontmatter `model:` field | `anthropic/claude-haiku-4-5` |
+| architect | `agent/architect.md` frontmatter `model:` field | `anthropic/claude-sonnet-4-6` |
+| developer | `agent/developer.md` frontmatter `model:` field | `anthropic/claude-sonnet-4-6` |
+| auditor | `agent/auditor.md` frontmatter `model:` field | `anthropic/claude-sonnet-4-6` |
+| reviewer | `agent/reviewer.md` frontmatter `model:` field | `anthropic/claude-haiku-4-5` |
+| research | `agent/research.md` frontmatter `model:` field | `anthropic/claude-haiku-4-5` |
+| explore | `opencode.json` `agent.explore.model` field | `anthropic/claude-haiku-4-5` |
+
+Pack agent models (spec, architect, developer, auditor, reviewer, research) are written into the agent file's YAML frontmatter. The `explore` model is written into the OpenCode config file because `explore` is a built-in opencode agent, not a template file.
+
+Model IDs should use the `provider/model-id` format (e.g., `anthropic/claude-sonnet-4-6`, `openai/gpt-5.5`).
+
+The `models` command runs in a loop — after setting a model for one agent, it asks if you want to configure another.
+
+**Restart opencode** after changing models.
+
+### Apply stack profiles
+
+```bash
+oc-workflow profiles
+```
+
+The `profiles` command shows a list of available stack profiles and lets you select one or more to apply. Profiles are inserted into the agent files at a designated marker line using idempotency markers, so re-running the command does not duplicate blocks. See [Stack Profiles](#stack-profiles) below.
+
+**Restart opencode** after applying profiles.
+
+### Recommended Model Strategy
 
 | Agent | Recommended Model Tier | Rationale |
 |-------|----------------------|-----------|
@@ -78,48 +121,29 @@ This workflow is **model-agnostic**. You must configure models for each agent ba
 | **Architect** | High-capability (e.g., Claude Sonnet, GPT-4) | Complex reasoning, tradeoff analysis |
 | **Developer** | High-capability (e.g., Claude Sonnet, GPT-4) | Code generation, multi-step implementation |
 | **Auditor** | High-capability (e.g., Claude Sonnet, GPT-4) | Fault diagnosis, pattern recognition |
+| **Research** | Mid-tier (e.g., Claude Haiku, GPT-4-mini) | Documentation lookup, summarization |
 | **Reviewer** | Mid-tier (e.g., Claude Haiku, GPT-4-mini) | Structured verification, lower token cost |
 | **Explore** | Mid-tier (e.g., Claude Haiku, GPT-4-mini) | Fast codebase scanning |
 
-### How to Configure
+### Example full configuration
 
-Edit each agent file in `~/.config/opencode/agent/` and add a `model:` field to the frontmatter:
+```bash
+oc-workflow init
+# Choose: Project .opencode/
 
-```yaml
----
-description: Designs system architecture...
-mode: primary
-model: anthropic/claude-sonnet-4-6  # <-- Add this line
-permission:
-  edit:
-    "*plan*.md": "allow"
-    "*": "deny"
----
-```
+oc-workflow models
+# Select: architect → anthropic/claude-sonnet-4-6
+# Select: developer → anthropic/claude-sonnet-4-6
+# Select: auditor → anthropic/claude-sonnet-4-6
+# Select: reviewer → anthropic/claude-haiku-4-5
+# Select: spec → anthropic/claude-haiku-4-5
+# Select: research → anthropic/claude-haiku-4-5
+# Select: explore → anthropic/claude-haiku-4-5
 
-**Example configuration:**
+oc-workflow profiles
+# Select: Python, JavaScript / TypeScript, etc.
 
-```yaml
-# architect.md
-model: anthropic/claude-sonnet-4-6
-
-# developer.md
-model: anthropic/claude-sonnet-4-6
-
-# auditor.md
-model: anthropic/claude-sonnet-4-6
-
-# reviewer.md
-model: anthropic/claude-haiku-4-5
-
-# opencode.json (for explore override)
-{
-  "agent": {
-    "explore": {
-      "model": "anthropic/claude-haiku-4-5"
-    }
-  }
-}
+# Restart opencode to apply all changes
 ```
 
 ## Usage
@@ -132,14 +156,25 @@ model: anthropic/claude-haiku-4-5
    > As a user I want to see my pending payments so I know what I owe.
 
    # Spec will:
-   # - Restate the story and identify ambiguities
-   # - Propose acceptance criteria and edge cases
-   # - Separate facts from assumptions
-   # - Ask targeted questions to reduce ambiguity
-   # - Produce a handoff brief ready for Architect
+   # - Use Interview Mode for vague requests: ask 3-5 targeted questions
+   # - Make reasonable assumptions and list them
+   # - Produce a lightweight spec with Objective, Acceptance Criteria, etc.
+   # - Or produce a full handoff brief if the request is well-defined
    ```
 
-1. **Design Phase** (Architect)
+1. **Research Phase** (Research) — when you need verified, current information
+   ```
+   # Switch to Research
+   > Does Next.js 15 support this middleware pattern? What changed from v14?
+
+   # Research will:
+   # - Use available documentation tools (Context7, MCP docs) if present
+   # - If no docs tools are available, proceed with best effort
+   # - Summarize only what applies to your task
+   # - Flag version-specific caveats and unverified claims
+   ```
+
+2. **Design Phase** (Architect)
    ```bash
    # In opencode, switch to Architect (Tab key)
    > I need to add user authentication to the API
@@ -151,7 +186,7 @@ model: anthropic/claude-haiku-4-5
    # - Optionally write a plan file if you say "save" or "nueva sesión"
    ```
 
-2. **Implementation Phase** (Developer)
+3. **Implementation Phase** (Developer)
    ```bash
    # Switch to Developer
    > Implement the authentication plan from plan-001-auth.md
@@ -165,14 +200,14 @@ model: anthropic/claude-haiku-4-5
    # - Report back with changes and verdict
    ```
 
-3. **Review Phase** (Reviewer, invoked by Developer)
+4. **Review Phase** (Reviewer, invoked by Developer)
    ```
    # Reviewer runs automatically when Developer invokes it
    # Returns: PASS | FAIL | PASS WITH NITS
    # If FAIL, Developer fixes and re-invokes Reviewer
    ```
 
-4. **Audit Phase** (Auditor)
+5. **Audit Phase** (Auditor)
    ```bash
    # Switch to Auditor
    > Audit the authentication implementation
@@ -182,7 +217,7 @@ model: anthropic/claude-haiku-4-5
    # - Ask before running project-specific validation commands
    #   (or run them automatically if an install profile was applied)
    # - Look for failures, risks, gaps
-   # - Return verdict: SHIP | SHIP WITH CAVEATS | DO NOT SHIP
+   # - Return verdict: ACCEPTABLE | NEEDS VALIDATION | NEEDS REVIEWER | FAIL
    ```
 
 ### Cross-Session Planning
@@ -206,6 +241,42 @@ The plan file includes:
 - Codebase warnings
 - Out of scope items
 
+### Spec Interview Mode
+
+When the request is vague, incomplete, or not-yet-shaped, Spec uses **Interview Mode**:
+
+- Ask at most 3–5 questions — only those that affect scope, behavior, or acceptance criteria
+- If a reasonable assumption can be made, list it under **Assumptions** rather than asking
+- Produce a lightweight spec rather than a long document
+
+Interview Mode output structure:
+
+```
+### Objective
+One sentence: what this feature/change must achieve.
+
+### Problem
+Why does this need to exist?
+
+### Non-goals
+What this explicitly does not cover.
+
+### Acceptance Criteria
+- [ ] Each item must be testable or observable.
+
+### Edge Cases
+- What could go wrong or be misunderstood?
+
+### Assumptions
+- What you assume instead of asking. The user can correct these.
+
+### Open Questions
+- Only if genuine ambiguity remains after reasonable assumptions.
+
+### Suggested Validation
+- How to confirm it works.
+```
+
 ## Agent Details
 
 ### Spec
@@ -213,11 +284,29 @@ The plan file includes:
 **Purpose**: Requirements clarification partner. Turns vague stories, tickets, and HDUs into clear, testable, implementation-ready specifications.
 
 **Key Features**:
+- Interview Mode for vague or exploratory requests (3–5 targeted questions)
 - Core clarification protocol (restate → identify user/goal → extract requirements → surface ambiguities → propose AC → edge cases → questions)
 - Challenges vague language ("properly", "fast", "valid", "etc.")
-- Produces a structured handoff brief (problem, requirements, acceptance criteria, edge cases, open questions) ready for Architect
-- Can invoke `explore` to relate a story to existing codebase behavior
+- Produces a structured handoff brief ready for Architect
 - Never invents business rules silently — all inferences are labeled as assumptions
+
+**Permissions**:
+- Read-only on codebase
+- Cannot run bash commands
+- Cannot write files
+- Can invoke subagents: `explore`
+
+### Research
+
+**Purpose**: Documentation and knowledge verification agent. Finds, verifies, and summarizes current documentation, API behavior, SDK specifics, breaking changes, and best practices.
+
+**Key Features**:
+- Uses available documentation tools (Context7, MCP docs servers) when present in the OpenCode session
+- If no docs tools are available, continues with best effort and marks uncertainty
+- Prefers official documentation and primary sources over secondary references
+- Calls out version-specific caveats
+- Produces a Research Summary with Question, Findings, Relevant Constraints, Recommendation, Risks/Unknowns, and Sources
+- Does not require Context7 — works with or without it
 
 **Permissions**:
 - Read-only on codebase
@@ -264,7 +353,7 @@ The plan file includes:
 **Key Features**:
 - 5-phase fault diagnosis protocol
 - Runs read-only inspection commands freely; asks before project-specific validation
-- Returns verdict: SHIP | SHIP WITH CAVEATS | DO NOT SHIP
+- Returns verdict: ACCEPTABLE | NEEDS VALIDATION | NEEDS REVIEWER | FAIL
 - Honest about what was and was not verified
 
 **Permissions**:
@@ -306,26 +395,29 @@ The plan file includes:
 - No bash
 - No file editing
 
-## Technology-agnostic default
+## Stack Profiles
 
-The committed workflow is technology-agnostic. It allows universal inspection commands and asks before running project-specific commands.
+After running `oc-workflow init`, you can add stack-specific permission profiles to the installed agent files:
 
-This keeps the workflow usable across JavaScript, TypeScript, Python, Go, Rust, Swift, Java, Kotlin, Ruby, PHP, and other stacks without baking one ecosystem into the default config.
+```bash
+oc-workflow profiles
+```
 
-### External-impact command denylist
+The `profiles` command shows a list of available stack profiles and lets you select one or more to apply. Profiles are inserted into the agent files at a designated marker line using idempotency markers, so re-running the command does not duplicate blocks.
 
-In addition to the risk-based `ask` catch-all, all three agents (Developer, Auditor, Reviewer) explicitly deny a short list of commands known to affect external systems:
+### Available profiles
 
-- **Deployment**: `vercel deploy*`, `netlify deploy*`, `firebase deploy*`
-- **Release**: `gh release*`
-- **Container registry**: `docker push*`
-- **Infrastructure**: `kubectl apply*`, `terraform apply*`, `pulumi up*`
-
-These are denied unconditionally, even if an optional profile is applied. They require the user to run them manually outside of opencode.
-
-## Optional command profiles
-
-The installer can apply optional command profiles to the installed agent files. These profiles are convenience allowlists for common validation commands.
+| Profile | Validation commands added |
+|---------|--------------------------|
+| **JavaScript / TypeScript** | npm test, pnpm lint, yarn typecheck, npx jest, npx vitest, npx eslint, npx prettier --check, etc. |
+| **Python** | pytest, ruff check, mypy, pyright, python -m unittest |
+| **Go** | go test, go vet (+ go fmt as "ask" for Developer only) |
+| **Rust** | cargo test, cargo check, cargo clippy, cargo fmt --check (+ cargo fmt as "ask" for Developer only) |
+| **Swift** | swift test, swift format lint (+ swift build, swift format as "ask" for Developer only) |
+| **Java / Kotlin** | ./gradlew test, ./gradlew check, ./gradlew ktlintCheck, gradle test, mvn test, mvn verify |
+| **Ruby** | bundle exec rspec, bundle exec rubocop, ruby -c, rails test |
+| **PHP** | composer test, vendor/bin/phpunit, vendor/bin/phpstan, vendor/bin/psalm, vendor/bin/phpcs |
+| **All stacks** | Applies every profile above at once |
 
 ### Role-specific profile behavior
 
@@ -347,14 +439,6 @@ Examples of commands that differ by role:
 | `swift build*`, `swift format*` | `ask` | not included |
 
 This ensures Auditor and Reviewer remain strictly read-only regardless of which profile is selected.
-
-### All stacks — broad convenience mode
-
-Option 10 enables all validation profiles at once. It is useful for:
-- Projects that span multiple languages or runtimes
-- Users who prefer fewer confirmation prompts across a wide range of stacks
-
-It increases the allowed command surface compared to selecting a single profile. It still does not enable publishing, deployment, dependency installation, destructive git operations, or write access for Auditor or Reviewer.
 
 ### What profiles add and do not add
 
@@ -383,23 +467,39 @@ Example — Python profile adds to the `bash` block:
     # END optional profile: python
 ```
 
-Profile markers prevent duplicate inserts if the installer is re-run. To apply a different profile, re-run `./install.sh`. To remove a profile, edit the installed agent files under `~/.config/opencode/agent/` and delete the lines between the `BEGIN` and `END` markers.
+### Idempotency
+
+Profile markers prevent duplicate inserts on re-runs. If a profile block with the same name already exists in an agent file, it will be skipped without changes. To remove a profile, edit the installed agent files and delete the lines between the `BEGIN` and `END` markers.
+
+If the marker line (`# Optional stack-specific profiles are inserted here by oc-workflow profiles`) has been removed from an agent file, the `profiles` command will report an error for that file rather than guessing where to insert.
+
+### External-impact command denylist
+
+In addition to the risk-based `ask` catch-all, all three agents (Developer, Auditor, Reviewer) explicitly deny a short list of commands known to affect external systems:
+
+- **Deployment**: `vercel deploy*`, `netlify deploy*`, `firebase deploy*`
+- **Release**: `gh release*`
+- **Container registry**: `docker push*`
+- **Infrastructure**: `kubectl apply*`, `terraform apply*`, `pulumi up*`
+
+These are denied unconditionally in the base agent templates. They require the user to run them manually outside of opencode.
 
 ## Customization
 
 ### Adding project-specific validation commands
 
-Edit the installed agent files in `~/.config/opencode/agent/` and add patterns after the `"*": "ask"` catch-all, near the profile marker, but before the deny rules. opencode uses **last matching rule wins**, so broad defaults must appear before specific allow/deny rules:
+Edit the installed agent files and add patterns after the profile blocks (or after the marker line if no profiles are installed), but before the deny rules. opencode uses **last matching rule wins**, so broad defaults must appear before specific allow/deny rules:
 
 ```yaml
 bash:
   "*": "ask"
   # ... read-only inspection patterns ...
-  # Optional stack-specific profiles are inserted here by install.sh
+  # Optional stack-specific profiles are inserted here by oc-workflow profiles
+  # (profile blocks appear here after running oc-workflow profiles)
   
   # Add your project-specific patterns here:
   "make test*": "allow"        # project-specific make target
-  "go test ./...": "allow"     # specific go test invocation
+  "npm run e2e*": "allow"      # specific e2e test command
   
   # ... deny rules at the end ...
 ```
@@ -412,7 +512,7 @@ bash:
 
 ### Extending the Workflow
 
-Add new agents by creating `.md` files in `~/.config/opencode/agent/`:
+Add new agents by creating `.md` files in the agent directory:
 
 ```yaml
 ---
@@ -429,12 +529,37 @@ permission:
 Your agent prompt here...
 ```
 
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Run the CLI in development mode
+npx tsx src/cli.ts --help
+npx tsx src/cli.ts init
+npx tsx src/cli.ts models
+npx tsx src/cli.ts profiles
+
+# Build for production
+npm run build
+
+# Run the built CLI
+node dist/cli.js --help
+
+# Run tests
+npm test
+
+# Type check
+npx tsc --noEmit
+```
+
 ## Troubleshooting
 
 ### Agent not appearing in opencode
 
 - Restart opencode after installation
-- Check that files are in `~/.config/opencode/agent/`
+- Check that files are in the correct `agent/` directory
 - Verify frontmatter syntax (no missing `---` delimiters)
 
 ### Model not loading
@@ -451,25 +576,11 @@ Your agent prompt here...
 
 ### Project-specific command asks for confirmation
 
-This is expected with the technology-agnostic default. Either approve the command when prompted, or re-run `./install.sh` and select an optional profile to allowlist it permanently.
+Run `oc-workflow profiles` to add stack-specific validation commands. If a command still asks for confirmation after applying the relevant profile, you can add it to the agent file's bash section.
 
-### Optional profile did not apply
+### I lost my model configuration after re-running init
 
-Re-run `./install.sh` and select the desired profile. Or manually add the command patterns to the installed agent files under `~/.config/opencode/agent/`.
-
-### I lost my model configuration after re-running the installer
-
-The installer creates a timestamped backup before overwriting existing files (e.g., `~/.config/opencode/agent_backup_20260604_120000/`). Copy the `model:` field from the backed-up agent file back into the newly installed file. If you had custom global settings, also review the backed-up `opencode.json`.
-
-### Duplicate profile entries
-
-The installer uses profile markers to avoid duplicate inserts. If you manually edited the markers, remove the duplicate block carefully. The markers look like:
-
-```
-# BEGIN optional profile: python
-...
-# END optional profile: python
-```
+`oc-workflow init` asks per file whether to overwrite. If you decline, the existing file with its model configuration is preserved.
 
 ### Agent behavior issues
 
@@ -481,7 +592,6 @@ The installer uses profile markers to avoid duplicate inserts. If you manually e
 
 Contributions welcome! Areas for improvement:
 
-- Additional stack-specific profile snippets
 - More detailed cross-session planning examples
 - Performance benchmarks with different model combinations
 

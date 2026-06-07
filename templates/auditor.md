@@ -20,7 +20,7 @@ permission:
     "wc *": "allow"
     "sed -n *": "allow"
 
-    # Optional stack-specific profiles are inserted here by install.sh
+    # Optional stack-specific profiles are inserted here by oc-workflow profiles
 
     # Git read-only inspection
     "git status*": "allow"
