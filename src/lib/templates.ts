@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
 import type { PackAgentName } from "./paths.js";
+import { PACK_AGENTS } from "./paths.js";
 
 /**
  * Resolve the templates directory path.
@@ -58,16 +59,7 @@ export function listTemplates(): PackAgentName[] {
   const templatesDir = getTemplatesDir();
   const found: PackAgentName[] = [];
 
-  const expectedNames: PackAgentName[] = [
-    "spec",
-    "architect",
-    "developer",
-    "reviewer",
-    "auditor",
-    "research",
-  ];
-
-  for (const name of expectedNames) {
+  for (const name of PACK_AGENTS) {
     const templatePath = join(templatesDir, `${name}.md`);
     if (existsSync(templatePath)) {
       found.push(name);

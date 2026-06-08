@@ -56,20 +56,55 @@ The `init` command prompts you to choose between:
 - **Project install**: writes to `./.opencode/agent/` and `./.opencode/opencode.json`
 - **Global install**: writes to `~/.config/opencode/agent/` and `~/.config/opencode/opencode.json`
 
-Installed files:
-- `agent/spec.md` — Spec agent
-- `agent/architect.md` — Architect agent
-- `agent/developer.md` — Developer agent
-- `agent/auditor.md` — Auditor agent
-- `agent/reviewer.md` — Reviewer agent
-- `agent/research.md` — Research agent
-- `opencode.json` — OpenCode config with Explore override
+`init` presents a checkbox list of all managed agents (custom workflow agents plus built-in `plan`, `build`, and `explore`). You can:
 
-If any agent file already exists, `init` will ask whether to overwrite it on a per-file basis. If you decline, the existing file is kept and the rest continue installing.
+- Install missing custom agents (by checking them)
+- Restore hidden built-in agents (by checking them)
+- Already-active agents are shown as selected and cannot be removed via `init`
 
-The `init` command installs technology-agnostic agent templates without any model configured. To set up models, run `opencode-path models` after init. To add stack-specific validation commands (test runners, linters, type checkers), run `opencode-path profiles` after init.
+Managed agents installed by `init`:
+
+- `agent/spec.md` — Spec agent (custom)
+- `agent/architect.md` — Architect agent (custom)
+- `agent/developer.md` — Developer agent (custom)
+- `agent/auditor.md` — Auditor agent (custom)
+- `agent/reviewer.md` — Reviewer agent (custom)
+- `agent/research.md` — Research agent (custom)
+- `plan` — Plan agent (built-in, managed in opencode config)
+- `build` — Build agent (built-in, managed in opencode config)
+- `explore` — Explore agent (built-in, managed in opencode config)
+- `opencode.json` — OpenCode config
+
+Installed custom agent files include a hidden marker (`<!-- managed-by: opencode-path -->`) so the CLI can distinguish workflow-managed files from manual files.
+
+If a manual file exists at a managed agent path without the managed marker, `init` will report a **conflict** and will not overwrite or modify it. Resolve conflicts manually.
+
+The `init` command installs technology-agnostic agent templates without any model configured. Built-in agents (`plan`, `build`, `explore`) are active by default even without running `init` — they are native to opencode and don't require installation. To set up models, run `opencode-path models` (works without init for built-ins). To add stack-specific validation commands (test runners, linters, type checkers), run `opencode-path profiles` after init.
 
 **Restart opencode** after installation.
+
+### Manage agents
+
+```bash
+opencode-path agents
+```
+
+The `agents` command provides full management of the workflow agent lifecycle. Unlike `init` (which is add/restore only), `agents` can also deactivate agents:
+
+- **Checked agents** → active (custom agents are installed, hidden built-ins are restored)
+- **Unchecked custom agents** → their `.md` files are deleted (with confirmation)
+- **Unchecked built-ins** (`plan`, `build`, `explore`) → hidden via `agent.<name>.disable: true` in `opencode.json` (not physically deleted)
+- **Conflict agents** (manual files without the managed marker) → displayed but not modifiable
+
+Key behaviors:
+
+| Operation | Custom agent | Built-in agent (plan, build, explore) |
+|-----------|-------------|------------------------------|
+| Activate | Install `.md` file from template | Remove `disable: true` from config |
+| Deactivate | Delete `.md` file | Set `disable: true` in config |
+| Preserve model/config | File is deleted (model is in the file) | All config fields (model, permissions, description) are preserved when hidden/restored |
+
+**Restart opencode** after changing agents.
 
 ### Configure models
 
@@ -77,13 +112,15 @@ The `init` command installs technology-agnostic agent templates without any mode
 opencode-path models
 ```
 
-The `models` command lets you select an agent and choose from the models exposed by OpenCode:
+The `models` command only shows **active managed agents** — agents that are currently installed and not hidden. If you deactivate an agent via `opencode-path agents`, it will no longer appear in the model selection.
+
+The command lets you select an agent and choose from the models exposed by OpenCode:
 
 ```bash
 opencode models
 ```
 
-If OpenCode cannot provide a model list, or if you need a model that is not listed, choose `Custom model...` and enter the model ID manually. It supports all seven agents:
+If OpenCode cannot provide a model list, or if you need a model that is not listed, choose `Custom model...` and enter the model ID manually.
 
 | Agent | Where the model is stored | Example model |
 |-------|--------------------------|----------------|
@@ -93,9 +130,15 @@ If OpenCode cannot provide a model list, or if you need a model that is not list
 | auditor | `agent/auditor.md` frontmatter `model:` field | `anthropic/claude-sonnet-4-6` |
 | reviewer | `agent/reviewer.md` frontmatter `model:` field | `anthropic/claude-haiku-4-5` |
 | research | `agent/research.md` frontmatter `model:` field | `anthropic/claude-haiku-4-5` |
+| plan | `opencode.json` `agent.plan.model` field | `anthropic/claude-sonnet-4-6` |
+| build | `opencode.json` `agent.build.model` field | `anthropic/claude-sonnet-4-6` |
 | explore | `opencode.json` `agent.explore.model` field | `anthropic/claude-haiku-4-5` |
 
-Pack agent models (spec, architect, developer, auditor, reviewer, research) are written into the agent file's YAML frontmatter. The `explore` model is written into the OpenCode config file because `explore` is a built-in opencode agent, not a template file.
+Custom agent models (spec, architect, developer, auditor, reviewer, research) are written into the agent file's YAML frontmatter. Built-in agent models (plan, build, explore) are written into the OpenCode config file because they are built-in opencode agents, not template files.
+
+Built-in agents are active by default even without running `init`. The `models` command works without init for configuring built-in agent models.
+
+If no active managed agents are found, `models` shows a clear message and exits. Since built-ins (`plan`, `build`, `explore`) are active by default, `models` will always have agents to configure unless all built-ins have been hidden.
 
 Model IDs should use the `provider/model-id` format (e.g., `anthropic/claude-sonnet-4-6`, `openai/gpt-5.5`).
 
@@ -109,7 +152,11 @@ The `models` command runs in a loop — after setting a model for one agent, it 
 opencode-path profiles
 ```
 
-The `profiles` command shows a list of available stack profiles and lets you select one or more to apply. Profiles are inserted into the agent files at a designated marker line using idempotency markers, so re-running the command does not duplicate blocks. See [Stack Profiles](#stack-profiles) below.
+The `profiles` command shows a list of available stack profiles and lets you select one or more to apply. Profiles are inserted into the agent files at a designated marker line using idempotency markers, so re-running the command does not duplicate blocks.
+
+**Note**: Profiles only apply to **active managed custom agents** — specifically `developer`, `reviewer`, and `auditor`. If these agents are missing, deleted, or in conflict, they are skipped. If no active patchable agents exist, `profiles` shows a clear message and exits.
+
+See [Stack Profiles](#stack-profiles) below.
 
 **Restart opencode** after applying profiles.
 
@@ -130,18 +177,24 @@ The `profiles` command shows a list of available stack profiles and lets you sel
 ```bash
 opencode-path init
 # Choose: Project .opencode/
+# Select which agents to install/restore
 
 opencode-path models
+# Configure models for active agents:
 # Select: architect → anthropic/claude-sonnet-4-6
 # Select: developer → anthropic/claude-sonnet-4-6
 # Select: auditor → anthropic/claude-sonnet-4-6
 # Select: reviewer → anthropic/claude-haiku-4-5
 # Select: spec → anthropic/claude-haiku-4-5
 # Select: research → anthropic/claude-haiku-4-5
-# Select: explore → anthropic/claude-haiku-4-5
+# Select: plan → anthropic/claude-sonnet-4-6
 
 opencode-path profiles
 # Select: Python, JavaScript / TypeScript, etc.
+
+# Later, if you want to deactivate some agents:
+opencode-path agents
+# Uncheck agents you don't need
 
 # Restart opencode to apply all changes
 ```
@@ -386,7 +439,7 @@ What this explicitly does not cover.
 **Purpose**: Fast codebase exploration.
 
 **Key Features**:
-- Built-in opencode agent (overridden in `opencode.json`)
+- Built-in opencode agent, managed by opencode-path alongside `plan` and `build`
 - Finds files, searches code, answers questions
 - Thoroughness levels: quick | medium | very thorough
 
@@ -538,6 +591,7 @@ npm install
 # Run the CLI in development mode
 npx tsx src/cli.ts --help
 npx tsx src/cli.ts init
+npx tsx src/cli.ts agents
 npx tsx src/cli.ts models
 npx tsx src/cli.ts profiles
 
@@ -580,7 +634,25 @@ Run `opencode-path profiles` to add stack-specific validation commands. If a com
 
 ### I lost my model configuration after re-running init
 
-`opencode-path init` asks per file whether to overwrite. If you decline, the existing file with its model configuration is preserved.
+Active managed agents (files with the `<!-- managed-by: opencode-path -->` marker) are never overwritten by `init`. If you previously installed agents without the marker, they will be reported as conflicts and left untouched.
+
+### Conflict: manual file at a managed agent path
+
+If you see a **conflict** in `init` or `agents`, it means a file exists at the agent path (e.g., `.opencode/agent/developer.md`) but does not contain the managed marker (`<!-- managed-by: opencode-path -->`). The CLI will not overwrite, delete, or modify conflict files.
+
+To resolve a conflict:
+1. If the file was installed by a previous version of opencode-path: you can safely add the managed marker to the end of the file, then re-run the command.
+2. If the file is your own custom agent and you want to keep it: leave it as-is. The CLI will ignore it.
+3. If you want to replace it with the workflow template: delete the file manually and re-run `opencode-path init` or `opencode-path agents`.
+
+### Hidden vs deleted agents
+
+- Built-in agents (`plan`, `build`, `explore`) are **hidden** by setting `agent.<name>.disable: true` in `opencode.json`. Their model and other config fields are preserved. Restoring them simply removes the `disable` flag.
+- Custom workflow agents are **deleted** by removing their `.md` file. The model (stored in the file's frontmatter) is lost. To reinstall, use `opencode-path init` or `opencode-path agents`.
+
+### External/manual agents are not managed
+
+Agents created manually outside the managed catalog (e.g., `general`, `task`, or any custom name not in the workflow) are never shown or modified by opencode-path commands. The managed catalog includes custom workflow agents (`spec`, `architect`, `developer`, `reviewer`, `auditor`, `research`) and built-in opencode agents (`plan`, `build`, `explore`).
 
 ### Agent behavior issues
 

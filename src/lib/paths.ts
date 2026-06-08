@@ -63,21 +63,8 @@ export const PACK_AGENTS = [
 export type PackAgentName = (typeof PACK_AGENTS)[number];
 
 /**
- * All agent names including explore (which is configured via opencode.json, not a .md file).
- */
-export const ALL_AGENT_NAMES = [...PACK_AGENTS, "explore"] as const;
-export type AgentName = (typeof ALL_AGENT_NAMES)[number];
-
-/**
  * Check if an agent name is a pack agent (has a .md template file).
  */
 export function isPackAgent(name: string): name is PackAgentName {
   return (PACK_AGENTS as readonly string[]).includes(name);
-}
-
-/**
- * Check if an agent name is explore (configured via opencode.json).
- */
-export function isExploreAgent(name: string): boolean {
-  return name === "explore";
 }

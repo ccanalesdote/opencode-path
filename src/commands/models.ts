@@ -2,20 +2,13 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import pc from "picocolors";
 import { select, input, confirm } from "@inquirer/prompts";
-import {
-  resolveTarget,
-  detectDefaultScope,
-  PACK_AGENTS,
-  ALL_AGENT_NAMES,
-  isPackAgent,
-  isExploreAgent,
-  type InstallScope,
-  type AgentName,
-  type PackAgentName,
-} from "../lib/paths.js";
+import { resolveTarget, detectDefaultScope, type InstallScope, type InstallTarget } from "../lib/paths.js";
 import { getAgentModel, setAgentModel } from "../lib/frontmatter.js";
-import { getExploreModel, setExploreModel } from "../lib/config.js";
-import { getTemplatePath } from "../lib/templates.js";
+import { getConfigAgentModel, setConfigAgentModel } from "../lib/config.js";
+import {
+  listActiveManagedModelAgents,
+  type ManagedAgentStatus,
+} from "../lib/agents.js";
 import {
   CUSTOM_MODEL_VALUE,
   buildModelOptions,
@@ -23,29 +16,42 @@ import {
 } from "../lib/opencode-models.js";
 
 /**
- * Get the current model for an agent at the given target.
+ * Get the current model for a managed agent at the given target.
  */
 function getCurrentModel(
-  agentName: AgentName,
+  agent: ManagedAgentStatus,
   target: { agentDir: string; configPath: string }
 ): string | undefined {
-  if (isExploreAgent(agentName)) {
-    return getExploreModel(target.configPath);
+  if (agent.kind === "builtin") {
+    return getConfigAgentModel(target.configPath, agent.name);
   }
-  const agentPath = join(target.agentDir, `${agentName}.md`);
+  // Custom agent: read from frontmatter
+  const agentPath = join(target.agentDir, `${agent.name}.md`);
   return getAgentModel(agentPath);
 }
 
 /**
- * Check whether any pack agents are installed at the given target.
+ * Set the model for a managed agent at the given target.
  */
-function hasInstalledAgents(target: { agentDir: string }): boolean {
-  return PACK_AGENTS.some((name) =>
-    existsSync(join(target.agentDir, `${name}.md`))
-  );
+function setCurrentModel(
+  agent: ManagedAgentStatus,
+  target: { agentDir: string; configPath: string },
+  model: string
+): void {
+  if (agent.kind === "builtin") {
+    setConfigAgentModel(target.configPath, agent.name, model);
+    return;
+  }
+  // Custom agent: write to frontmatter
+  const agentPath = join(target.agentDir, `${agent.name}.md`);
+  // Do NOT create the file from a template if missing — only set model on existing files
+  if (!existsSync(agentPath)) {
+    throw new Error(`Agent file not found: ${agentPath}`);
+  }
+  setAgentModel(agentPath, model);
 }
 
-async function promptCustomModel(agentName: AgentName): Promise<string> {
+async function promptCustomModel(agentName: string): Promise<string> {
   let newModel = await input({
     message: `Enter model for ${agentName} (e.g., anthropic/claude-sonnet-4-6):`,
     validate: (value: string) => {
@@ -89,7 +95,7 @@ async function promptCustomModel(agentName: AgentName): Promise<string> {
 }
 
 async function promptModelFromOpenCode(
-  agentName: AgentName,
+  agentName: string,
   availableModels: string[],
   currentModel?: string
 ): Promise<string> {
@@ -121,20 +127,44 @@ async function promptModelFromOpenCode(
 }
 
 /**
+ * Check whether any managed agents are active at the given target.
+ */
+function hasActiveManagedAgents(target: InstallTarget): boolean {
+  const activeAgents = listActiveManagedModelAgents(target);
+  return activeAgents.length > 0;
+}
+
+/**
  * Run the `opencode-path models` command.
+ *
+ * Only shows active managed agents. Custom agents store models in frontmatter;
+ * built-in agents (plan, build, explore) store models in opencode config.
+ * Built-ins are active by default even without init.
  */
 export async function modelsCommand(): Promise<void> {
   console.log(pc.bold("\n🎯 OpenCode Path Model Configuration\n"));
 
   // Step 1: Detect target
   const defaultScope = detectDefaultScope();
+  const projectTarget = resolveTarget("project");
+  const globalTarget = resolveTarget("global");
+
+  const hasProjectActiveAgents = hasActiveManagedAgents(projectTarget);
+  const hasGlobalActiveAgents = hasActiveManagedAgents(globalTarget);
+
   let scope: InstallScope;
 
-  const projectTarget = resolveTarget("project");
-  const hasProjectAgents = hasInstalledAgents(projectTarget);
+  if (!hasProjectActiveAgents && !hasGlobalActiveAgents) {
+    // No active managed agents on either target
+    console.log(
+      pc.yellow(
+        `\n   No active managed agents found. Use ${pc.cyan("opencode-path agents")} to activate agents.\n`
+      )
+    );
+    return;
+  }
 
-  if (!hasProjectAgents) {
-    // Only global target available
+  if (!hasProjectActiveAgents) {
     scope = "global";
     console.log(`   Target: Global (auto-detected)`);
   } else {
@@ -149,7 +179,7 @@ export async function modelsCommand(): Promise<void> {
         {
           value: "global" as InstallScope,
           name: `Global ~/.config/opencode/`,
-          description: resolveTarget("global").agentDir,
+          description: globalTarget.agentDir,
         },
       ],
       default: defaultScope,
@@ -158,19 +188,21 @@ export async function modelsCommand(): Promise<void> {
 
   const target = resolveTarget(scope);
 
-  // Verify target has installed agents (unless user picked it for explore-only config)
-  if (!hasInstalledAgents(target) && !hasInstalledAgents(resolveTarget("global"))) {
+  // Show resolved paths
+  console.log(`   Agent dir: ${target.agentDir}`);
+  console.log(`   Config:    ${target.configPath}\n`);
+
+  // Get active managed agents
+  const activeAgents = listActiveManagedModelAgents(target);
+
+  if (activeAgents.length === 0) {
     console.log(
-      pc.red(
-        `\n   No installed agents found. Run ${pc.cyan("opencode-path init")} first.\n`
+      pc.yellow(
+        `\n   No active managed agents to configure. Use ${pc.cyan("opencode-path agents")} to activate agents.\n`
       )
     );
     return;
   }
-
-  // Show resolved paths
-  console.log(`   Agent dir: ${target.agentDir}`);
-  console.log(`   Config:    ${target.configPath}\n`);
 
   const availableModels = listOpenCodeModels();
   if (availableModels.length > 0) {
@@ -189,49 +221,52 @@ export async function modelsCommand(): Promise<void> {
   let configureAnother = true;
 
   while (configureAnother) {
+    // Refresh active agents each iteration (in case config changed)
+    const currentActiveAgents = listActiveManagedModelAgents(target);
+
+    if (currentActiveAgents.length === 0) {
+      console.log(
+        pc.yellow(
+          "\n   No active managed agents remaining to configure.\n"
+        )
+      );
+      break;
+    }
+
     // Show current models
-    const agentChoices = ALL_AGENT_NAMES.map((name) => {
-      const currentModel = getCurrentModel(name, target);
+    const agentChoices = currentActiveAgents.map((agent) => {
+      const currentModel = getCurrentModel(agent, target);
       const modelDisplay = currentModel
         ? pc.dim(` (current: ${currentModel})`)
         : pc.dim(" (no model set)");
 
+      const kindBadge = agent.kind === "builtin" ? pc.dim("[built-in]") : pc.dim("[custom]");
+
       return {
-        value: name as AgentName,
-        name: `${name}${modelDisplay}`,
+        value: agent.name,
+        name: `${agent.name} ${kindBadge}${modelDisplay}`,
       };
     });
 
-    const agentName = await select<AgentName>({
+    const agentName = await select<string>({
       message: "Select an agent to configure:",
       choices: agentChoices,
     });
 
-    // Check if the agent file exists (for pack agents)
-    if (isPackAgent(agentName)) {
-      const agentPath = join(target.agentDir, `${agentName}.md`);
-      if (!existsSync(agentPath)) {
-        console.log(
-          pc.red(
-            `\n   Agent file not found: ${agentPath}`
-          )
-        );
-        console.log(
-          pc.yellow(
-            `   Run ${pc.cyan("opencode-path init")} for the ${scope} target first.\n`
-          )
-        );
-        const continueAnyway = await confirm({
-          message: "Configure another agent?",
-          default: true,
-        });
-        if (!continueAnyway) break;
-        continue;
-      }
+    const selectedAgent = currentActiveAgents.find((a) => a.name === agentName);
+    if (!selectedAgent) {
+      // Shouldn't happen, but handle gracefully
+      console.log(pc.red(`\n   Agent ${agentName} is no longer active.\n`));
+      const continueAnyway = await confirm({
+        message: "Configure another agent?",
+        default: true,
+      });
+      if (!continueAnyway) break;
+      continue;
     }
 
     // Show current model
-    const currentModel = getCurrentModel(agentName, target);
+    const currentModel = getCurrentModel(selectedAgent, target);
     if (currentModel) {
       console.log(pc.dim(`   Current model: ${currentModel}`));
     } else {
@@ -239,23 +274,22 @@ export async function modelsCommand(): Promise<void> {
     }
 
     const trimmedModel = await promptModelFromOpenCode(
-      agentName,
+      selectedAgent.name,
       availableModels,
       currentModel
     );
 
     // Apply the model
-    if (isExploreAgent(agentName)) {
-      setExploreModel(target.configPath, trimmedModel);
-    } else if (isPackAgent(agentName)) {
-      const agentPath = join(target.agentDir, `${agentName}.md`);
-      const templatePath = getTemplatePath(agentName);
-      setAgentModel(agentPath, trimmedModel, templatePath);
+    try {
+      setCurrentModel(selectedAgent, target, trimmedModel);
+      console.log(
+        pc.green(`\n   ✓ ${selectedAgent.name} model set to: ${pc.bold(trimmedModel)}\n`)
+      );
+    } catch (err: any) {
+      console.log(
+        pc.red(`\n   Error setting model: ${err.message}\n`)
+      );
     }
-
-    console.log(
-      pc.green(`\n   ✓ ${agentName} model set to: ${pc.bold(trimmedModel)}\n`)
-    );
 
     // Configure another?
     configureAnother = await confirm({

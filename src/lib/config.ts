@@ -40,9 +40,10 @@ export function writeConfig(filePath: string, config: OpenCodeConfig): void {
  * Ensure an OpenCode config has the minimum required structure:
  * - `$schema` field
  * - `agent` object
- * - `agent.explore` object with description (if not present)
  *
  * Preserves all existing fields. Returns the updated config.
+ * Does NOT create any agent sub-objects — those are only created
+ * when an explicit action (e.g., setting a model or hiding) requires it.
  */
 export function ensureConfigStructure(
   config: OpenCodeConfig
@@ -57,16 +58,6 @@ export function ensureConfigStructure(
   // Ensure agent object
   if (!result.agent || typeof result.agent !== "object" || Array.isArray(result.agent)) {
     result.agent = {};
-  }
-
-  const agent = result.agent as Record<string, unknown>;
-
-  // Ensure agent.explore object
-  if (!agent.explore || typeof agent.explore !== "object" || Array.isArray(agent.explore)) {
-    agent.explore = {
-      description:
-        "Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\"). When calling this agent, specify the desired thoroughness level: \"quick\" for basic searches, \"medium\" for moderate exploration, or \"very thorough\" for comprehensive analysis across multiple locations and naming conventions.",
-    };
   }
 
   return result;
@@ -112,6 +103,41 @@ export function getExploreModel(filePath: string): string | undefined {
  * Creates the config with minimum structure if it doesn't exist.
  */
 export function setExploreModel(filePath: string, model: string): void {
+  setConfigAgentModel(filePath, "explore", model);
+}
+
+/**
+ * Get the model for a config-based agent (e.g., plan, build, explore).
+ * Returns undefined if the file doesn't exist or has no model set.
+ */
+export function getConfigAgentModel(
+  filePath: string,
+  agentName: string
+): string | undefined {
+  const config = readConfig(filePath);
+  if (!config) return undefined;
+
+  const agent = config.agent as Record<string, unknown> | undefined;
+  if (!agent) return undefined;
+
+  const agentConfig = agent[agentName] as Record<string, unknown> | undefined;
+  if (!agentConfig) return undefined;
+
+  const model = agentConfig.model;
+  return typeof model === "string" ? model : undefined;
+}
+
+/**
+ * Set the model for a config-based agent (e.g., plan, build, explore).
+ * Preserves all other config fields.
+ * Creates the config with minimum structure if it doesn't exist.
+ * Creates the agent sub-object if needed.
+ */
+export function setConfigAgentModel(
+  filePath: string,
+  agentName: string,
+  model: string
+): void {
   let config = readConfig(filePath);
   if (!config) {
     config = {};
@@ -119,8 +145,13 @@ export function setExploreModel(filePath: string, model: string): void {
   config = ensureConfigStructure(config);
 
   const agent = config.agent as Record<string, unknown>;
-  const explore = agent.explore as Record<string, unknown>;
-  explore.model = model;
+
+  if (!agent[agentName] || typeof agent[agentName] !== "object" || Array.isArray(agent[agentName])) {
+    agent[agentName] = {};
+  }
+
+  const agentConfig = agent[agentName] as Record<string, unknown>;
+  agentConfig.model = model;
 
   writeConfig(filePath, config);
 }

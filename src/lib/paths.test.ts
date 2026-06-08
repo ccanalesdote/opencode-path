@@ -3,9 +3,7 @@ import {
   resolveTarget,
   detectDefaultScope,
   isPackAgent,
-  isExploreAgent,
   PACK_AGENTS,
-  ALL_AGENT_NAMES,
 } from "./paths.js";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
@@ -46,7 +44,7 @@ describe("detectDefaultScope", () => {
   });
 });
 
-describe("isPackAgent / isExploreAgent", () => {
+describe("isPackAgent", () => {
   it("identifies pack agents", () => {
     expect(isPackAgent("spec")).toBe(true);
     expect(isPackAgent("architect")).toBe(true);
@@ -59,15 +57,10 @@ describe("isPackAgent / isExploreAgent", () => {
   it("does not identify explore as a pack agent", () => {
     expect(isPackAgent("explore")).toBe(false);
   });
-
-  it("identifies explore agent", () => {
-    expect(isExploreAgent("explore")).toBe(true);
-    expect(isExploreAgent("spec")).toBe(false);
-  });
 });
 
-describe("PACK_AGENTS / ALL_AGENT_NAMES", () => {
-  it("PACK_AGENTS contains exactly the six pack agents", () => {
+describe("PACK_AGENTS", () => {
+  it("contains exactly the six pack agents", () => {
     expect(PACK_AGENTS).toEqual([
       "spec",
       "architect",
@@ -76,10 +69,5 @@ describe("PACK_AGENTS / ALL_AGENT_NAMES", () => {
       "auditor",
       "research",
     ]);
-  });
-
-  it("ALL_AGENT_NAMES includes explore plus the six pack agents", () => {
-    expect(ALL_AGENT_NAMES).toContain("explore");
-    expect(ALL_AGENT_NAMES).toHaveLength(7);
   });
 });

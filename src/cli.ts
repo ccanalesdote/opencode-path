@@ -4,6 +4,7 @@ import { Command } from "commander";
 import { initCommand } from "./commands/init.js";
 import { modelsCommand } from "./commands/models.js";
 import { profilesCommand } from "./commands/profiles.js";
+import { agentsCommand } from "./commands/agents.js";
 
 const program = new Command();
 
@@ -20,8 +21,15 @@ program
   });
 
 program
+  .command("agents")
+  .description("Manage which workflow agents are active (install, delete, hide, restore)")
+  .action(async () => {
+    await agentsCommand();
+  });
+
+program
   .command("models")
-  .description("Configure model IDs for each agent")
+  .description("Configure model IDs for active agents")
   .action(async () => {
     await modelsCommand();
   });

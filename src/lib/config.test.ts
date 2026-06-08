@@ -6,6 +6,8 @@ import {
   createOrMergeConfig,
   getExploreModel,
   setExploreModel,
+  getConfigAgentModel,
+  setConfigAgentModel,
 } from "./config.js";
 import {
   readFileSync,
@@ -73,13 +75,10 @@ describe("ensureConfigStructure", () => {
     expect(typeof result.agent).toBe("object");
   });
 
-  it("adds agent.explore with description if missing", () => {
+  it("does NOT automatically create agent.explore", () => {
     const result = ensureConfigStructure({});
     const agent = result.agent as Record<string, unknown>;
-    expect(agent.explore).toBeDefined();
-    const explore = agent.explore as Record<string, unknown>;
-    expect(explore.description).toBeDefined();
-    expect(typeof explore.description).toBe("string");
+    expect(agent.explore).toBeUndefined();
   });
 
   it("preserves existing $schema if present", () => {
@@ -89,7 +88,7 @@ describe("ensureConfigStructure", () => {
     expect(result.$schema).toBe("custom-schema");
   });
 
-  it("preserves existing agent.explore.description", () => {
+  it("preserves existing agent.explore if present", () => {
     const result = ensureConfigStructure({
       agent: {
         explore: {
@@ -153,7 +152,6 @@ describe("createOrMergeConfig", () => {
     expect(result.myCustomField).toBe("should be preserved");
     const agent = result.agent as Record<string, unknown>;
     expect(agent.myAgent).toEqual({ description: "Custom agent" });
-    expect(agent.explore).toBeDefined();
   });
 });
 
@@ -253,5 +251,176 @@ describe("getExploreModel / setExploreModel", () => {
     const written = JSON.parse(readFileSync(filePath, "utf-8"));
     expect(written.customTopLevel).toBe("preserved");
     expect(written.agent.customAgent).toEqual({ description: "my agent" });
+  });
+});
+
+describe("getConfigAgentModel / setConfigAgentModel", () => {
+  it("returns undefined if no model is set for a config-based agent", () => {
+    const filePath = fixturePath("no-agent-model.json");
+    const config = {
+      $schema: "https://opencode.ai/config.json",
+      agent: { plan: { description: "test" } },
+    };
+    writeFileSync(filePath, JSON.stringify(config, null, 2), "utf-8");
+
+    expect(getConfigAgentModel(filePath, "plan")).toBeUndefined();
+  });
+
+  it("gets the model for a config-based agent", () => {
+    const filePath = fixturePath("with-agent-model.json");
+    const config = {
+      $schema: "https://opencode.ai/config.json",
+      agent: {
+        plan: {
+          description: "test",
+          model: "anthropic/claude-sonnet-4-6",
+        },
+      },
+    };
+    writeFileSync(filePath, JSON.stringify(config, null, 2), "utf-8");
+
+    expect(getConfigAgentModel(filePath, "plan")).toBe("anthropic/claude-sonnet-4-6");
+  });
+
+  it("sets the model for a config-based agent", () => {
+    const filePath = fixturePath("set-agent-model.json");
+    const config = {
+      $schema: "https://opencode.ai/config.json",
+      agent: { build: { description: "test" } },
+    };
+    writeFileSync(filePath, JSON.stringify(config, null, 2), "utf-8");
+
+    setConfigAgentModel(filePath, "build", "anthropic/claude-haiku-4-5");
+
+    const model = getConfigAgentModel(filePath, "build");
+    expect(model).toBe("anthropic/claude-haiku-4-5");
+
+    // Verify description is preserved
+    const written = JSON.parse(readFileSync(filePath, "utf-8"));
+    expect(written.agent.build.description).toBe("test");
+  });
+
+  it("creates agent sub-object if it does not exist", () => {
+    const filePath = fixturePath("new-agent-config.json");
+    const config = {
+      $schema: "https://opencode.ai/config.json",
+      agent: {},
+    };
+    writeFileSync(filePath, JSON.stringify(config, null, 2), "utf-8");
+
+    setConfigAgentModel(filePath, "plan", "openai/gpt-5.5");
+
+    const model = getConfigAgentModel(filePath, "plan");
+    expect(model).toBe("openai/gpt-5.5");
+  });
+
+  it("creates config file if it does not exist", () => {
+    const filePath = fixturePath("new-file-agent-config.json");
+    setConfigAgentModel(filePath, "build", "anthropic/claude-sonnet-4-6");
+
+    expect(existsSync(filePath)).toBe(true);
+    const config = JSON.parse(readFileSync(filePath, "utf-8"));
+    expect(config.agent.build.model).toBe("anthropic/claude-sonnet-4-6");
+    expect(config.$schema).toBe("https://opencode.ai/config.json");
+  });
+
+  it("replaces an existing agent model", () => {
+    const filePath = fixturePath("replace-agent-model.json");
+    const config = {
+      $schema: "https://opencode.ai/config.json",
+      agent: {
+        plan: {
+          description: "test",
+          model: "old-model",
+        },
+      },
+    };
+    writeFileSync(filePath, JSON.stringify(config, null, 2), "utf-8");
+
+    setConfigAgentModel(filePath, "plan", "new-model");
+
+    const model = getConfigAgentModel(filePath, "plan");
+    expect(model).toBe("new-model");
+  });
+
+  it("preserves unrelated fields when setting agent model", () => {
+    const filePath = fixturePath("preserve-agent-fields.json");
+    const config = {
+      $schema: "https://opencode.ai/config.json",
+      customTopLevel: "preserved",
+      agent: {
+        plan: {
+          description: "test",
+          permission: { edit: "allow" },
+        },
+        customAgent: {
+          description: "my agent",
+        },
+      },
+    };
+    writeFileSync(filePath, JSON.stringify(config, null, 2), "utf-8");
+
+    setConfigAgentModel(filePath, "plan", "openai/gpt-5.5");
+
+    const written = JSON.parse(readFileSync(filePath, "utf-8"));
+    expect(written.customTopLevel).toBe("preserved");
+    expect(written.agent.customAgent).toEqual({ description: "my agent" });
+    expect(written.agent.plan.permission).toEqual({ edit: "allow" });
+    expect(written.agent.plan.model).toBe("openai/gpt-5.5");
+  });
+
+  it("preserves disable field when setting model", () => {
+    const filePath = fixturePath("preserve-disable.json");
+    const config = {
+      $schema: "https://opencode.ai/config.json",
+      agent: {
+        plan: {
+          disable: true,
+          description: "test",
+        },
+      },
+    };
+    writeFileSync(filePath, JSON.stringify(config, null, 2), "utf-8");
+
+    setConfigAgentModel(filePath, "plan", "anthropic/claude-sonnet-4-6");
+
+    const written = JSON.parse(readFileSync(filePath, "utf-8"));
+    expect(written.agent.plan.disable).toBe(true);
+    expect(written.agent.plan.model).toBe("anthropic/claude-sonnet-4-6");
+  });
+
+  it("delegates getExploreModel to getConfigAgentModel", () => {
+    const filePath = fixturePath("explore-delegate.json");
+    const config = {
+      $schema: "https://opencode.ai/config.json",
+      agent: {
+        explore: {
+          description: "test",
+          model: "anthropic/claude-haiku-4-5",
+        },
+      },
+    };
+    writeFileSync(filePath, JSON.stringify(config, null, 2), "utf-8");
+
+    expect(getExploreModel(filePath)).toBe("anthropic/claude-haiku-4-5");
+    expect(getConfigAgentModel(filePath, "explore")).toBe("anthropic/claude-haiku-4-5");
+  });
+
+  it("delegates setExploreModel to setConfigAgentModel", () => {
+    const filePath = fixturePath("explore-set-delegate.json");
+    const config = {
+      $schema: "https://opencode.ai/config.json",
+      agent: {
+        explore: {
+          description: "test",
+        },
+      },
+    };
+    writeFileSync(filePath, JSON.stringify(config, null, 2), "utf-8");
+
+    setExploreModel(filePath, "anthropic/claude-sonnet-4-6");
+
+    expect(getExploreModel(filePath)).toBe("anthropic/claude-sonnet-4-6");
+    expect(getConfigAgentModel(filePath, "explore")).toBe("anthropic/claude-sonnet-4-6");
   });
 });

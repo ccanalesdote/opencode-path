@@ -6,6 +6,7 @@ import {
   resolveTarget,
   detectDefaultScope,
   type InstallScope,
+  type InstallTarget,
 } from "../lib/paths.js";
 import {
   PROFILES,
@@ -15,32 +16,73 @@ import {
   type ProfileApplyResult,
   type PerFileStatus,
 } from "../lib/profiles.js";
+import {
+  listActiveManagedAgents,
+  listManagedAgentStatuses,
+  type ManagedAgentStatus,
+} from "../lib/agents.js";
 
 /**
- * Agent files that receive stack profiles.
- * - developer.md: dev variant
- * - reviewer.md: read-only variant
- * - auditor.md: read-only variant
- *
- * spec.md, architect.md, and research.md are NOT modified.
+ * Patchable agent definitions: which agents get which variant.
+ * Only active managed custom agents matching these names will be patched.
  */
-const PATCHABLE_AGENTS = [
+const PATCHABLE_DEFS = [
   { name: "developer", variant: "dev" as const },
   { name: "reviewer", variant: "readonly" as const },
   { name: "auditor", variant: "readonly" as const },
 ];
 
 /**
- * Check whether any patchable agent files exist at the given target.
+ * Filter the patchable agents down to only those that are active managed custom agents.
+ * Returns the entries from PATCHABLE_DEFS whose names are active custom agents.
  */
-function hasPatchableAgents(target: { agentDir: string }): boolean {
-  return PATCHABLE_AGENTS.some((agent) =>
-    existsSync(join(target.agentDir, `${agent.name}.md`))
+function getActivePatchableAgents(
+  target: InstallTarget
+): { name: string; variant: "dev" | "readonly" }[] {
+  const activeAgents = listActiveManagedAgents(target);
+  const activeCustomNames = new Set(
+    activeAgents.filter((a) => a.kind === "custom").map((a) => a.name)
   );
+
+  // Also check for conflict agents among patchable names
+  const allStatuses = listManagedAgentStatuses(target);
+  const conflictNames = new Set(
+    allStatuses.filter((a) => a.state === "conflict").map((a) => a.name)
+  );
+
+  const result: { name: string; variant: "dev" | "readonly" }[] = [];
+  const conflictPatchable: string[] = [];
+
+  for (const def of PATCHABLE_DEFS) {
+    if (activeCustomNames.has(def.name)) {
+      result.push(def);
+    } else if (conflictNames.has(def.name)) {
+      conflictPatchable.push(def.name);
+    }
+  }
+
+  // Warn about conflict agents
+  if (conflictPatchable.length > 0) {
+    console.log(
+      pc.yellow(
+        `   ⚠ These patchable agents have manual files (conflict): ${conflictPatchable.join(", ")}`
+      )
+    );
+    console.log(
+      pc.dim(
+        "     They will not be modified. Resolve conflicts manually or add the managed marker.\n"
+      )
+    );
+  }
+
+  return result;
 }
 
 /**
  * Run the `opencode-path profiles` command.
+ *
+ * Only applies to active managed custom agents that are in the patchable set
+ * (developer, reviewer, auditor).
  */
 export async function profilesCommand(): Promise<void> {
   console.log(pc.bold("\n🧩 OpenCode Path Stack Profiles\n"));
@@ -50,22 +92,21 @@ export async function profilesCommand(): Promise<void> {
   const projectTarget = resolveTarget("project");
   const globalTarget = resolveTarget("global");
 
-  const hasProjectAgents = hasPatchableAgents(projectTarget);
-  const hasGlobalAgents = hasPatchableAgents(globalTarget);
+  const projectPatchable = getActivePatchableAgents(projectTarget);
+  const globalPatchable = getActivePatchableAgents(globalTarget);
 
   let scope: InstallScope;
 
-  if (!hasProjectAgents && !hasGlobalAgents) {
+  if (projectPatchable.length === 0 && globalPatchable.length === 0) {
     console.log(
-      pc.red(
-        `\n   No installed agent files found. Run ${pc.cyan("opencode-path init")} first.\n`
+      pc.yellow(
+        `\n   No active patchable agents found. Use ${pc.cyan("opencode-path agents")} to activate developer, reviewer, and/or auditor.\n`
       )
     );
     return;
   }
 
-  if (!hasProjectAgents) {
-    // Only global target available
+  if (projectPatchable.length === 0) {
     scope = "global";
     console.log(`   Target: Global (auto-detected)`);
   } else {
@@ -89,8 +130,21 @@ export async function profilesCommand(): Promise<void> {
 
   const target = resolveTarget(scope);
 
+  // Get active patchable agents for this target
+  const patchableAgents = getActivePatchableAgents(target);
+
+  if (patchableAgents.length === 0) {
+    console.log(
+      pc.yellow(
+        `\n   No active patchable agents at this target. Activate developer, reviewer, or auditor with ${pc.cyan("opencode-path agents")}.\n`
+      )
+    );
+    return;
+  }
+
   // Show resolved target
-  console.log(pc.bold(`\n   Agent directory: ${target.agentDir}\n`));
+  console.log(pc.bold(`\n   Agent directory: ${target.agentDir}`));
+  console.log(pc.dim(`   Active patchable agents: ${patchableAgents.map((a) => a.name).join(", ")}\n`));
 
   // Step 2: Show available profiles and let user select
   const selectedProfileNames = await checkbox<ProfileName>({
@@ -129,7 +183,8 @@ export async function profilesCommand(): Promise<void> {
   console.log(
     pc.bold(`\n📋 Applying profiles: ${profileLabels}`)
   );
-  console.log(`   Target: ${target.agentDir}\n`);
+  console.log(`   Target: ${target.agentDir}`);
+  console.log(`   Agents: ${patchableAgents.map((a) => `${a.name} (${a.variant})`).join(", ")}\n`);
 
   const proceed = await confirm({
     message: "Apply selected profiles?",
@@ -148,7 +203,7 @@ export async function profilesCommand(): Promise<void> {
     const profile = getProfile(profileName);
     if (!profile) continue;
 
-    const result = applyProfileToAgents(target.agentDir, profile, PATCHABLE_AGENTS);
+    const result = applyProfileToAgents(target.agentDir, profile, patchableAgents);
     results.push(result);
   }
 
@@ -157,14 +212,12 @@ export async function profilesCommand(): Promise<void> {
   const applied: string[] = [];
   const skipped: string[] = [];
   const failed: string[] = [];
-  const incomplete: string[] = [];
   const changedFiles: Set<string> = new Set();
 
   for (const r of results) {
     const inserted = r.files.filter((f) => f.status === "inserted");
     const alreadyExists = r.files.filter((f) => f.status === "already_exists");
     const errors = r.files.filter((f) => f.status === "marker_not_found");
-    const missing = r.files.filter((f) => f.status === "file_missing");
 
     for (const f of inserted) {
       changedFiles.add(`${f.agent}.md`);
@@ -178,15 +231,10 @@ export async function profilesCommand(): Promise<void> {
       failed.push(r.profileLabel);
     }
 
-    if (missing.length > 0) {
-      incomplete.push(r.profileLabel);
-    }
-
     if (
       alreadyExists.length === r.files.length &&
       inserted.length === 0 &&
-      errors.length === 0 &&
-      missing.length === 0
+      errors.length === 0
     ) {
       skipped.push(r.profileLabel);
     }
@@ -207,22 +255,17 @@ export async function profilesCommand(): Promise<void> {
     console.log(pc.red(`   Failed:   ${failed.join(", ")}`));
   }
 
-  if (incomplete.length > 0) {
-    console.log(pc.yellow(`   Incomplete: ${incomplete.join(", ")}`));
-  }
-
   if (changedFiles.size > 0) {
     console.log(`   Changed:  ${[...changedFiles].join(", ")}`);
   }
 
-  // Per-profile details
+  // Per-profile details for failed
   let hasWarnings = false;
 
   for (const r of results) {
     const errors = r.files.filter((f) => f.status === "marker_not_found");
-    const missing = r.files.filter((f) => f.status === "file_missing");
 
-    if (errors.length > 0 || missing.length > 0) {
+    if (errors.length > 0) {
       if (!hasWarnings) {
         console.log(pc.yellow("\n   ⚠ Details:"));
         hasWarnings = true;
@@ -231,11 +274,6 @@ export async function profilesCommand(): Promise<void> {
       for (const f of errors) {
         console.log(
           pc.yellow(`     ${r.profileLabel} → ${f.agent}.md: profile marker not found`)
-        );
-      }
-      for (const f of missing) {
-        console.log(
-          pc.dim(`     ${r.profileLabel} → ${f.agent}.md: file not installed`)
         );
       }
     }
