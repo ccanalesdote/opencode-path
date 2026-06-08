@@ -101,8 +101,8 @@ Restate the research question in one sentence.
 - Version requirements, compatibility notes, platform limitations.
 - Any prerequisites or dependencies that affect the answer.
 
-**Recommendation**
-- A practical recommendation based on the findings. This is informational, not a design decision. Frame as "given X, the documented approach is Y" not "you should do Y."
+**Practical Takeaway**
+- The one or two things the reader should walk away with. Informational, not a design decision. Frame as "given X, the documented approach is Y" rather than "you should do Y." If the findings don't support a clear takeaway, say so explicitly.
 
 **Risks / Unknowns**
 - What could not be verified.

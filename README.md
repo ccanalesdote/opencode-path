@@ -25,6 +25,14 @@ This workflow defines 6 specialized agents with clear responsibilities:
 5. **Model-Agnostic by Default**: No models are hardcoded. Use `opencode-path models` to configure models explicitly for each agent.
 6. **Stack Profiles via Opt-In Command**: The CLI installs agnostic agent templates by default. Stack-specific permission profiles (test runners, linters, type checkers) are added separately via `opencode-path profiles`, keeping the base install clean and technology-agnostic.
 
+## Why not an orchestrator?
+
+Many opencode plugins solve multi-agent workflows with an orchestrator — a router that reads your prompt and picks the agent automatically. That model works well when you want to stay hands-off and let the system decide the next step.
+
+This pack takes the opposite stance. The flow is **user-driven**: you choose which agent to talk to, in what order, and when to switch. The Clarify → Research → Design → Implement → Review → Audit sequence is a guide you follow, not a pipeline that runs on its own. Each agent is a specialist with its own permissions, model, and personality.
+
+The whole pack is designed as a **lightweight SDD**: specs, plans, and audits stay as readable artifacts you own. The trade-off is explicit — you give up automation in exchange for control, visibility, and predictability. If you want the system to make those decisions for you, an orchestrator plugin is a better fit, and that's a perfectly valid choice.
+
 ## Installation
 
 ### Install the CLI
@@ -358,7 +366,7 @@ What this explicitly does not cover.
 - If no docs tools are available, continues with best effort and marks uncertainty
 - Prefers official documentation and primary sources over secondary references
 - Calls out version-specific caveats
-- Produces a Research Summary with Question, Findings, Relevant Constraints, Recommendation, Risks/Unknowns, and Sources
+- Produces a Research Summary with Question, Findings, Relevant Constraints, Practical Takeaway, Risks/Unknowns, and Sources
 - Does not require Context7 — works with or without it
 
 **Permissions**:

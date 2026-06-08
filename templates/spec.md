@@ -176,8 +176,6 @@ One sentence: what this must achieve.
 
 ## User / actor
 
-## Goal
-
 ## Current behavior
 
 ## Expected behavior
