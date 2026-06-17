@@ -7,14 +7,29 @@ permission:
     ".path/work/*/brief.md": "allow"
     ".path/work/*/tasks.md": "allow"
     ".path/work/*/progress.md": "allow"
+    "../*/.path/work/*/brief.md": "allow"
+    "../*/.path/work/*/tasks.md": "allow"
+    "../*/.path/work/*/progress.md": "allow"
   write:
     "*": "deny"
     ".path/work/*/brief.md": "allow"
     ".path/work/*/tasks.md": "allow"
     ".path/work/*/progress.md": "allow"
+    "../*/.path/work/*/brief.md": "allow"
+    "../*/.path/work/*/tasks.md": "allow"
+    "../*/.path/work/*/progress.md": "allow"
   bash:
     "*": "deny"
     "mkdir -p .path/work/*": "allow"
+    "mkdir -p ../*/.path/work/*": "allow"
+    'mkdir -p "../*/.path/work/*"': "allow"
+    "pwd": "allow"
+    "ls -d ../*": "allow"
+    'ls -d "../*"': "allow"
+    "git worktree list*": "allow"
+    "git branch*": "allow"
+    "git rev-parse*": "allow"
+    "git worktree add*": "ask"
     "*;*": "deny"
     "*&&*": "deny"
     "*||*": "deny"
@@ -106,17 +121,46 @@ If none of these triggers is present, respond in chat and do not write files.
 
 ### Path confirmation
 
-Before writing, confirm the path with the user.
-- If the user named a folder, confirm that exact path.
-- If the user did not name a folder, propose a kebab-case `.path/work/{feature-slug}/` and wait for confirmation.
-- Never auto-increment filenames or assume a folder is free; existing files may already be there.
-- After the user confirms a new work-folder path, create `.path/work/{feature-slug}/` yourself if needed. You may create `.path/work/` as part of creating the work folder.
+Before creating a persistent handoff, confirm the feature slug with the user.
+- If the user named a folder or slug, confirm that exact slug.
+- If the user did not name one, propose a kebab-case slug and wait for confirmation.
+- Never auto-increment slugs or assume a folder is free.
+- Persistent handoffs use the sibling worktree flow described below. Do not create `.path/work/{slug}/` in the current checkout; the work folder will be created inside the new worktree after the user confirms the full worktree setup.
 
 ### Collision handling
 
 Do not silently overwrite existing artifacts.
-- If `.path/work/{feature-slug}/` already exists, inspect what is there or ask the user how to proceed before writing.
+- If the work folder `.path/work/{slug}/` already exists inside the target worktree, inspect what is there or ask the user how to proceed before writing.
 - If one or more of `brief.md`, `tasks.md`, or `progress.md` already exists, ask whether to reuse, append, replace, or stop.
+- Also check for the edge case where `.path/work/{slug}/` exists in the original main checkout from a pre-worktree flow. Ask the user whether to leave it, copy/move manually, or choose a different slug; do not move it silently.
+
+### Worktree isolation for parallel features
+
+Every persistent work-folder handoff gets a dedicated Git worktree and feature branch so parallel features stay isolated.
+
+**Deriving paths** — before creating anything, run `pwd` to get the current directory. Extract the basename (the repo folder name) from the output. Do not use shell command substitution such as `basename $(pwd)`. Derive:
+- Worktree path: `../{repo-name}-{slug}/` (sibling to the current checkout)
+- Branch name: `feature/{slug}`
+- Work folder inside worktree: `.path/work/{slug}/`
+
+**Collision checks** — before creating the worktree:
+- Run `ls -d "../{repo-name}-{slug}"` to check whether the sibling directory already exists (even if not registered as a worktree).
+- Run `git worktree list` to check whether that path is already a registered worktree.
+- Run `git branch --list feature/{slug}` to check whether the branch already exists.
+- If the directory exists, is a registered worktree, or the branch exists, ask the user how to proceed. Do not overwrite, reuse silently, or auto-increment.
+
+**Confirmation** — present all four items in one message and wait for explicit user approval:
+1. Worktree path: `../{repo-name}-{slug}/`
+2. Work folder path: `../{repo-name}-{slug}/.path/work/{slug}/`
+3. Branch: `feature/{slug}`
+4. Base: current `HEAD` (state the commit or branch the worktree will be created from)
+
+**Creation** — after confirmation:
+1. Create the worktree: `git worktree add "../{repo-name}-{slug}" -b feature/{slug}`
+2. Create the work folder inside the worktree: `mkdir -p "../{repo-name}-{slug}/.path/work/{slug}/"`
+3. Write `brief.md`, `tasks.md`, and `progress.md` into the new work folder.
+
+**Multiple worktrees** — two or more worktrees for different slugs can coexist, each on its own `feature/{slug}` branch. This is the expected state for parallel features.
 
 ### Legacy plan files
 
