@@ -9,19 +9,19 @@ This workflow defines 6 specialized agents with clear responsibilities:
 | Agent | Role | Mode | Permissions |
 |-------|------|------|-------------|
 | **Spec** | Clarifies vague stories into testable specs before design | Primary | Read-only, no bash |
-| **Architect** | Designs system architecture, produces structured design decisions | Primary | Read-only + write `*plan*.md` |
-| **Developer** | Implements code changes end-to-end | Primary | Edit/write + risk-based bash policy |
-| **Auditor** | Audits existing work for failures, risks, and gaps | Primary | Read-only + inspection commands + confirmation for project-specific validation |
+| **Architect** | Designs system architecture, produces structured design decisions | Primary | Legacy plan/work-folder artifact writes + `mkdir -p .path/work/*` |
+| **Developer** | Implements code changes end-to-end | Primary | Broad application edit/write + risk-based bash policy |
+| **Auditor** | Audits existing work for failures, risks, and gaps | Primary | Read-only + narrow proactive append-only audit notes for explicit work folders |
 | **Research** | Researches documentation, APIs, SDK behavior, and best practices | Primary | Read-only, no bash |
 | **Reviewer** | Reviews code changes, returns PASS/FAIL verdict | Subagent | Read-only + inspection commands + confirmation for project-specific validation |
 | **Explore** | Fast codebase exploration | Subagent (built-in) | Read-only |
 
 ### Key Design Principles
 
-1. **Blast Radius Minimization**: Only Developer can modify files. All other agents are read-only.
+1. **Blast Radius Minimization**: Only Developer modifies application code broadly. Architect can create/write handoff artifacts, Reviewer is strictly read-only, and Auditor may only append narrow audit notes when auditing an explicit or clearly detectable work folder.
 2. **Separation of Concerns**: Clarify (Spec) → Research (Research) → Design (Architect) → Implement (Developer) → Review (Reviewer) → Audit (Auditor).
-3. **Cross-Session Planning**: Architect produces self-contained briefs for implementation in new sessions.
-4. **Granular Permissions**: Risk-based bash policy for Developer; scoped read-only inspection for Auditor and Reviewer.
+3. **Cross-Session Planning**: Architect produces self-contained cross-session artifacts, preferably under `.path/work/<kebab-feature>/`.
+4. **Granular Permissions**: Risk-based bash policy for Developer; Reviewer is strictly read-only; Auditor is read-only for code with a narrow work-folder audit-note exception; Architect can only create work-folder directories under `.path/work/`.
 5. **Model-Agnostic by Default**: No models are hardcoded. Use `opencode-path models` to configure models explicitly for each agent.
 6. **Stack Profiles via Opt-In Command**: The CLI installs agnostic agent templates by default. Stack-specific permission profiles (test runners, linters, type checkers) are added separately via `opencode-path profiles`, keeping the base install clean and technology-agnostic.
 
@@ -31,7 +31,7 @@ Many opencode plugins solve multi-agent workflows with an orchestrator — a rou
 
 This pack takes the opposite stance. The flow is **user-driven**: you choose which agent to talk to, in what order, and when to switch. The Clarify → Research → Design → Implement → Review → Audit sequence is a guide you follow, not a pipeline that runs on its own. Each agent is a specialist with its own permissions, model, and personality.
 
-The whole pack is designed as a **lightweight SDD**: specs, plans, and audits stay as readable artifacts you own. The trade-off is explicit — you give up automation in exchange for control, visibility, and predictability. If you want the system to make those decisions for you, an orchestrator plugin is a better fit, and that's a perfectly valid choice.
+The whole pack is designed as a **lightweight SDD**: specs, work folders, legacy plans, and audits stay as readable artifacts you own. The trade-off is explicit — you give up automation in exchange for control, visibility, and predictability. If you want the system to make those decisions for you, an orchestrator plugin is a better fit, and that's a perfectly valid choice.
 
 ## Installation
 
@@ -244,17 +244,21 @@ opencode-path agents
    # - Clarify goals and constraints
    # - Enumerate options with tradeoffs
    # - Recommend an approach
-   # - Optionally write a plan file if you say "save" or "nueva sesión"
+   # - Optionally create and write a work folder if you say "save" or "nueva sesión"
    ```
 
 3. **Implementation Phase** (Developer)
    ```bash
    # Switch to Developer
-   > Implement the authentication plan from plan-001-auth.md
+   > Implement the authentication work folder at .path/work/authentication/
    
    # Developer will:
-   # - Read the plan
+   # - Read brief.md, tasks.md, and progress.md first
+   # - Continue the single in_progress task if there is exactly one
+   # - Otherwise ask which task/subset to implement before editing
+   # - Or read a legacy plan if you handed off plan-001-auth.md
    # - Implement in small steps
+   # - Update tasks.md and append progress.md during work
    # - Inspect own diff; ask before running project-specific validation
    #   unless commands are allowlisted by the installed profile
    # - Invoke Reviewer for QA
@@ -275,6 +279,8 @@ opencode-path agents
    
    # Auditor will:
    # - Inspect files and git history
+   # - If a specific work folder is being audited, append findings to
+   #   tasks.md and progress.md and also report them in chat
    # - Ask before running project-specific validation commands
    #   (or run them automatically if an install profile was applied)
    # - Look for failures, risks, gaps
@@ -283,24 +289,42 @@ opencode-path agents
 
 ### Cross-Session Planning
 
-When Architect writes a plan file, it's self-contained for a new session:
+Preferred v1 cross-session handoff uses a work folder:
 
 ```bash
 # Session 1: Design
 > Architect, design the authentication system
-> Save this to plan-001-auth.md
+> Save this under .path/work/authentication/
 
 # Session 2: Implementation (new session, no context)
+> Developer, implement .path/work/authentication/
+```
+
+That work folder contains:
+- `brief.md` — stable design context and acceptance criteria
+- `tasks.md` — current bounded task state, verification, and auditor notes
+- `progress.md` — append-only execution and audit history
+
+`tasks.md` uses this Auditor notes table so active, resolved, discarded, or cancelled findings can be tracked without deleting history:
+
+```md
+## Auditor notes
+| Date | Related task | Severity | Status | Finding / resolution note | Suggested follow-up |
+|---|---|---|---|---|---|
+```
+
+Architect can create `.path/work/<kebab-feature>/` directly as part of the handoff flow. The user does not need to create that folder manually.
+
+Legacy `plan-*.md` handoff remains supported as a backward-compatible fallback:
+
+```bash
+> Architect, design the authentication system
+> Save this to plan-001-auth.md
+
 > Developer, implement plan-001-auth.md
 ```
 
-The plan file includes:
-- Context the implementer needs
-- Step-by-step plan with verification steps
-- Edge cases to handle explicitly
-- Acceptance criteria (testable)
-- Codebase warnings
-- Out of scope items
+V1 intentionally stops at prompt/docs/permissions only: there is no CLI scaffolding command yet for creating `.path/work/...` folders automatically. Directory creation is handled by Architect's narrow `mkdir -p .path/work/<kebab-feature>/` permission, not by a CLI command and not by manual user setup.
 
 ### Spec Interview Mode
 
@@ -381,23 +405,29 @@ What this explicitly does not cover.
 
 **Key Features**:
 - 5-step design protocol (goal → constraints → options → tradeoffs → recommendation)
-- Can write `*plan*.md` files for cross-session handoff
+- Preferred handoff writes `.path/work/<kebab-feature>/brief.md`, `tasks.md`, and `progress.md`
+- Can create `.path/work/<kebab-feature>/` with `mkdir -p` before writing those artifacts
+- Legacy `*plan*.md` files remain supported as a fallback
 - Invokes `explore` for codebase reconnaissance
 - Invokes `reviewer` to stress-test designs
 - Technology-agnostic planning: does not assume a stack in acceptance criteria
 
 **Permissions**:
 - Read-only on codebase
-- Can write files matching `*plan*.md`
-- Cannot run bash commands
+- Can write legacy `*plan*.md` files and preferred `.path/work/*/{brief,tasks,progress}.md` artifacts
+- Can run only `mkdir -p .path/work/*` to create the work-folder directory; other bash commands remain denied
 - Can invoke subagents: `explore`, `reviewer`
 
 ### Developer
 
-**Purpose**: Execution agent. The only agent that modifies files.
+**Purpose**: Execution agent. The only agent that broadly modifies application files.
 
 **Key Features**:
 - Implements well-defined tasks with clear acceptance criteria
+- Supports both preferred work-folder handoff and legacy `plan-*.md` handoff
+- Reads `brief.md`, `tasks.md`, and `progress.md` before work-folder implementation
+- Continues the single `in_progress` task if there is exactly one; otherwise asks the user which task/subset to take next
+- Updates `tasks.md` and appends `progress.md` during execution; records Reviewer verdicts there
 - Self-verifies by inspecting diffs; asks before running project-specific validation commands unless they are allowlisted
 - Invokes Reviewer before declaring done
 - Reports changes, verification, and Reviewer verdict
@@ -412,13 +442,18 @@ What this explicitly does not cover.
 **Purpose**: Fault-finding agent for existing work.
 
 **Key Features**:
-- 5-phase fault diagnosis protocol
+- Evidence-first audit protocol
+- Understands `.path/work/<kebab-feature>/` state and compares declared progress against actual code state
+- If auditing an explicit or clearly detectable work folder, proactively appends structured audit notes to `tasks.md` and `progress.md` and also reports findings in chat
+- Uses `Status` plus `Finding / resolution note` in `tasks.md` Auditor notes so findings can be resolved or discarded without deleting history
+- Never rewrites prior audit/developer history; disputed findings are resolved with appended dated notes
 - Runs read-only inspection commands freely; asks before project-specific validation
 - Returns verdict: ACCEPTABLE | NEEDS VALIDATION | NEEDS REVIEWER | FAIL
 - Honest about what was and was not verified
 
 **Permissions**:
 - Read-only on codebase
+- Narrow proactive append-only exception only for `.path/work/*/tasks.md` and `.path/work/*/progress.md` when auditing an explicit or clearly detectable work folder
 - Universal inspection and git read commands are always allowed
 - Project-specific validation (tests, linters, type checks) requires confirmation unless an install profile was applied
 - Mutating commands, git state changes, deployment, and external-impact commands are forbidden
@@ -430,6 +465,7 @@ What this explicitly does not cover.
 
 **Key Features**:
 - Returns structured PASS/FAIL verdict
+- Remains read-only even when a work folder is present; Developer records the verdict in `progress.md`
 - Runs read-only inspection commands freely; asks before project-specific validation
 - Severity scale: blocker | major | minor | nit
 - Specific findings with file:line locations
@@ -485,7 +521,7 @@ The `profiles` command shows a list of available stack profiles and lets you sel
 Profiles are not applied uniformly across agents. Each profile has two variants:
 
 - **Developer** receives the full profile, including controlled mutating commands (such as formatters or builds that write artifacts) listed as `ask` so the user confirms before they run.
-- **Auditor and Reviewer** receive only the read-only validation subset. Commands that write files — formatters, build commands producing artifacts, or anything that mutates state — are intentionally excluded from their variant.
+- **Auditor and Reviewer** receive only the read-only validation subset. Commands that write files — formatters, build commands producing artifacts, or anything that mutates state — are intentionally excluded from their variant. This does not change the base prompt-level exception that lets Auditor append narrow audit notes to `.path/work/*/tasks.md` and `.path/work/*/progress.md`.
 
 Examples of commands that differ by role:
 
@@ -499,7 +535,7 @@ Examples of commands that differ by role:
 | `swift format lint*` | `allow` | `allow` |
 | `swift build*`, `swift format*` | `ask` | not included |
 
-This ensures Auditor and Reviewer remain strictly read-only regardless of which profile is selected.
+This ensures Reviewer remains strictly read-only regardless of which profile is selected, while Auditor keeps only its narrow work-folder audit-note exception.
 
 ### What profiles add and do not add
 
@@ -510,7 +546,7 @@ This ensures Auditor and Reviewer remain strictly read-only regardless of which 
 - Dependency installation (`npm install`, `pip install`, etc.)
 - Publishing or deployment
 - Destructive git operations
-- Write access for Auditor or Reviewer
+- Broad write access for Auditor or Reviewer (Auditor keeps only the narrow work-folder audit-note exception)
 - Broad filesystem mutations
 
 Example — Python profile adds to the `bash` block:
