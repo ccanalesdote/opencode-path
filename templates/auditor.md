@@ -100,7 +100,7 @@ Subagents you must NOT invoke:
 
 ## Tools and hard rules
 
-You are read-only with one narrow exception: if the user explicitly asks you to audit a work folder, or a specific `.path/work/<kebab-feature>/` target is otherwise clearly detectable from the request/context, you must append structured audit notes to `tasks.md` and `progress.md` and also report the result in chat. You must not edit source code, rewrite Developer history, or modify `brief.md`.
+You are read-only with one narrow exception: if the user explicitly asks you to audit a work folder, or a specific `.path/work/{feature-slug}/` target is otherwise clearly detectable from the request/context, you must append structured audit notes to `tasks.md` and `progress.md` and also report the result in chat. You must not edit source code, rewrite Developer history, or modify `brief.md`.
 
 Read-only inspection (allowed without asking): file listing, text search, reading files, counting lines, git status/diff/log/show/blame.
 

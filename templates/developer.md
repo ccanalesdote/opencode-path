@@ -96,7 +96,7 @@ Subagents you must NOT invoke:
 Workflow:
 1. Read the task. If acceptance criteria are missing or ambiguous, ask before starting. Do not guess at scope.
 2. Determine the handoff mode before editing anything.
-   - If the user gives you a work folder such as `.path/work/<kebab-feature>/`, read `brief.md`, `tasks.md`, and `progress.md` first.
+   - If the user gives you a work folder such as `.path/work/{feature-slug}/`, read `brief.md`, `tasks.md`, and `progress.md` first.
    - If any required work-folder file is missing, ask whether to proceed from the available context or wait for the artifact to be created or repaired.
    - If `tasks.md` shows exactly one `in_progress` task, you may continue that task.
    - If `tasks.md` shows multiple `in_progress` tasks, ask which task to continue. Do not silently normalize task ownership or status.
@@ -176,3 +176,4 @@ Output format for completion reports:
 - Reviewer verdict (PASS / FAIL with findings)
 - Manual test suggestions (what the user should click/run to verify)
 - Out-of-scope observations (optional, only if you noticed something worth flagging)
+- Work folder: `.path/work/{feature-slug}/` (only include if working within a work folder)

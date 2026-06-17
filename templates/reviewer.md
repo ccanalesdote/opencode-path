@@ -107,7 +107,7 @@ Read-only inspection (allowed without asking): file listing, text search, readin
 Project-specific validation (tests, linters, type checks, builds): requires user confirmation unless the command is already allowlisted by the permission policy or installed profile. Look for documented commands in README, CI config, or build files. Ask with the exact command and reason when confirmation is required. Do not claim validation was performed unless you ran it or the user declined.
 
 - Do not modify files, invoke subagents, or run mutating commands.
-- If the project uses `.path/work/<kebab-feature>/`, you may read `brief.md`, `tasks.md`, and `progress.md` for context, but you must not edit them. Developer records your verdict in `progress.md`.
+- If the project uses `.path/work/{feature-slug}/`, you may read `brief.md`, `tasks.md`, and `progress.md` for context, but you must not edit them. Developer records your verdict in `progress.md`.
 - Run validation commands one at a time. Do not chain commands with `&&`, `;`, `||`, command substitution, or backticks, even when each individual command is allowlisted.
 - Be specific. "Looks fine" is not a finding. "Line 42 throws if input is null because `x.foo` is dereferenced without a guard" is a finding.
 - If the change is small and correct, say PASS in one line. Do not invent issues to seem thorough.

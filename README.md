@@ -20,7 +20,7 @@ This workflow defines 6 specialized agents with clear responsibilities:
 
 1. **Blast Radius Minimization**: Only Developer modifies application code broadly. Architect can create/write handoff artifacts, Reviewer is strictly read-only, and Auditor may only append narrow audit notes when auditing an explicit or clearly detectable work folder.
 2. **Separation of Concerns**: Clarify (Spec) → Research (Research) → Design (Architect) → Implement (Developer) → Review (Reviewer) → Audit (Auditor).
-3. **Cross-Session Planning**: Architect produces self-contained cross-session artifacts, preferably under `.path/work/<kebab-feature>/`.
+3. **Cross-Session Planning**: Architect produces self-contained cross-session artifacts, preferably under `.path/work/{feature-slug}/`.
 4. **Granular Permissions**: Risk-based bash policy for Developer; Reviewer is strictly read-only; Auditor is read-only for code with a narrow work-folder audit-note exception; Architect can only create work-folder directories under `.path/work/`.
 5. **Model-Agnostic by Default**: No models are hardcoded. Use `opencode-path models` to configure models explicitly for each agent.
 6. **Stack Profiles via Opt-In Command**: The CLI installs agnostic agent templates by default. Stack-specific permission profiles (test runners, linters, type checkers) are added separately via `opencode-path profiles`, keeping the base install clean and technology-agnostic.
@@ -337,7 +337,7 @@ Each task row includes a `Covers` column so it is clear which acceptance criteri
 #### Do Not Touch
 ```
 
-Architect can create `.path/work/<kebab-feature>/` directly as part of the handoff flow. The user does not need to create that folder manually.
+Architect can create `.path/work/{feature-slug}/` directly as part of the handoff flow. The user does not need to create that folder manually.
 
 Legacy `plan-*.md` handoff remains supported as a backward-compatible fallback:
 
@@ -348,7 +348,7 @@ Legacy `plan-*.md` handoff remains supported as a backward-compatible fallback:
 > Developer, implement plan-001-auth.md
 ```
 
-V1 intentionally stops at prompt/docs/permissions only: there is no CLI scaffolding command yet for creating `.path/work/...` folders automatically. Directory creation is handled by Architect's narrow `mkdir -p .path/work/<kebab-feature>/` permission, not by a CLI command and not by manual user setup.
+V1 intentionally stops at prompt/docs/permissions only: there is no CLI scaffolding command yet for creating `.path/work/...` folders automatically. Directory creation is handled by Architect's narrow `mkdir -p .path/work/{feature-slug}/` permission, not by a CLI command and not by manual user setup.
 
 ### Spec Interview Mode
 
@@ -431,13 +431,13 @@ What this explicitly does not cover.
 
 **Key Features**:
 - 5-step design protocol (goal → constraints → options → tradeoffs → recommendation)
-- Preferred handoff writes `.path/work/<kebab-feature>/brief.md`, `tasks.md`, and `progress.md`
+- Preferred handoff writes `.path/work/{feature-slug}/brief.md`, `tasks.md`, and `progress.md`
 - Defines `brief.md` acceptance criteria as the success contract with `## Acceptance Criteria`
 - Adds a `Covers` column to `tasks.md` and maps every task to one or more AC IDs
 - Verifies every AC is covered by at least one task
 - Uses explicit recovery fields in `progress.md` for cross-session handoff
 - Applies a Minimal Implementation Check before recommending an approach
-- Can create `.path/work/<kebab-feature>/` with `mkdir -p` before writing those artifacts
+- Can create `.path/work/{feature-slug}/` with `mkdir -p` before writing those artifacts
 - Legacy `*plan*.md` files remain supported as a fallback
 - Invokes `explore` for codebase reconnaissance
 - Invokes `reviewer` to stress-test designs
@@ -478,7 +478,7 @@ What this explicitly does not cover.
 - Evidence-first audit protocol
 - Performs a feature-level Traceability Audit across `brief.md`, `tasks.md`, `progress.md`, and code
 - Performs an Anti-bloat Audit covering unnecessary files, dependencies, abstractions, refactors, and out-of-scope changes
-- Understands `.path/work/<kebab-feature>/` state and compares declared progress against actual code state
+- Understands `.path/work/{feature-slug}/` state and compares declared progress against actual code state
 - If auditing an explicit or clearly detectable work folder, proactively appends structured audit notes to `tasks.md` and `progress.md` and also reports findings in chat
 - Uses `Status` plus `Finding / resolution note` in `tasks.md` Auditor notes so findings can be resolved or discarded without deleting history
 - Never rewrites prior audit/developer history; disputed findings are resolved with appended dated notes
