@@ -9,7 +9,7 @@ This workflow defines 6 specialized agents with clear responsibilities:
 | Agent | Role | Mode | Permissions |
 |-------|------|------|-------------|
 | **Spec** | Clarifies vague stories into testable specs before design | Primary | Read-only, no bash |
-| **Architect** | Designs system architecture, produces structured design decisions | Primary | Legacy plan/work-folder artifact writes + `mkdir -p .path/work/*` |
+| **Architect** | Designs system architecture, produces structured design decisions | Primary | Work-folder artifact writes + `mkdir -p .path/work/*` |
 | **Developer** | Implements code changes end-to-end | Primary | Broad application edit/write + risk-based bash policy |
 | **Auditor** | Audits existing work for failures, risks, and gaps | Primary | Read-only + narrow proactive append-only audit notes for explicit work folders |
 | **Research** | Researches documentation, APIs, SDK behavior, and best practices | Primary | Read-only, no bash |
@@ -20,7 +20,7 @@ This workflow defines 6 specialized agents with clear responsibilities:
 
 1. **Blast Radius Minimization**: Only Developer modifies application code broadly. Architect can create/write handoff artifacts, Reviewer is strictly read-only, and Auditor may only append narrow audit notes when auditing an explicit or clearly detectable work folder.
 2. **Separation of Concerns**: Clarify (Spec) → Research (Research) → Design (Architect) → Implement (Developer) → Review (Reviewer) → Audit (Auditor).
-3. **Cross-Session Planning**: Architect produces self-contained cross-session artifacts, preferably under `.path/work/{feature-slug}/`.
+3. **Cross-Session Planning**: Architect produces self-contained cross-session artifacts under `.path/work/{feature-slug}/`.
 4. **Granular Permissions**: Risk-based bash policy for Developer; Reviewer is strictly read-only; Auditor is read-only for code with a narrow work-folder audit-note exception; Architect can only create work-folder directories under `.path/work/`.
 5. **Model-Agnostic by Default**: No models are hardcoded. Use `opencode-path models` to configure models explicitly for each agent.
 6. **Stack Profiles via Opt-In Command**: The CLI installs agnostic agent templates by default. Stack-specific permission profiles (test runners, linters, type checkers) are added separately via `opencode-path profiles`, keeping the base install clean and technology-agnostic.
@@ -31,7 +31,7 @@ Many opencode plugins solve multi-agent workflows with an orchestrator — a rou
 
 This pack takes the opposite stance. The flow is **user-driven**: you choose which agent to talk to, in what order, and when to switch. The Clarify → Research → Design → Implement → Review → Audit sequence is a guide you follow, not a pipeline that runs on its own. Each agent is a specialist with its own permissions, model, and personality.
 
-The whole pack is designed as a **lightweight SDD**: specs, work folders, legacy plans, and audits stay as readable artifacts you own. The trade-off is explicit — you give up automation in exchange for control, visibility, and predictability. If you want the system to make those decisions for you, an orchestrator plugin is a better fit, and that's a perfectly valid choice.
+The whole pack is designed as a **lightweight SDD**: specs, work folders, and audits stay as readable artifacts you own. The trade-off is explicit — you give up automation in exchange for control, visibility, and predictability. If you want the system to make those decisions for you, an orchestrator plugin is a better fit, and that's a perfectly valid choice.
 
 ## Installation
 
@@ -242,10 +242,10 @@ opencode-path agents
    
    # Architect will:
    # - Clarify goals and constraints
-   # - Enumerate options with tradeoffs
-   # - Apply a Minimal Implementation Check before recommending
-   # - Optionally create and write a work folder if you say "save" or "nueva sesión"
-   ```
+    # - Enumerate options with tradeoffs
+    # - Apply a Minimal Implementation Check before recommending
+    # - Optionally create and write a work folder when you trigger a handoff
+    ```
 
 3. **Implementation Phase** (Developer)
    ```bash
@@ -255,10 +255,9 @@ opencode-path agents
    # Developer will:
    # - Read brief.md, tasks.md, and progress.md first
    # - Continue the single in_progress task if there is exactly one
-   # - Otherwise ask which task/subset to implement before editing
-   # - Or read a legacy plan if you handed off plan-001-auth.md
-   # - Implement only the selected task and the ACs in its `Covers` field
-   # - Update tasks.md and append progress.md during work
+    # - Otherwise ask which task/subset to implement before editing
+    # - Implement only the selected task and the ACs in its `Covers` field
+    # - Update tasks.md and append progress.md during work
    # - Inspect own diff; ask before running project-specific validation
    #   unless commands are allowlisted by the installed profile
    # - Invoke Reviewer for QA
@@ -293,7 +292,7 @@ opencode-path agents
 
 ### Cross-Session Planning
 
-Preferred v1 cross-session handoff uses a work folder:
+Cross-session handoff uses a work folder:
 
 ```bash
 # Session 1: Design
@@ -338,15 +337,6 @@ Each task row includes a `Covers` column so it is clear which acceptance criteri
 ```
 
 Architect can create `.path/work/{feature-slug}/` directly as part of the handoff flow. The user does not need to create that folder manually.
-
-Legacy `plan-*.md` handoff remains supported as a backward-compatible fallback:
-
-```bash
-> Architect, design the authentication system
-> Save this to plan-001-auth.md
-
-> Developer, implement plan-001-auth.md
-```
 
 V1 intentionally stops at prompt/docs/permissions only: there is no CLI scaffolding command yet for creating `.path/work/...` folders automatically. Directory creation is handled by Architect's narrow `mkdir -p .path/work/{feature-slug}/` permission, not by a CLI command and not by manual user setup.
 
@@ -431,21 +421,20 @@ What this explicitly does not cover.
 
 **Key Features**:
 - 5-step design protocol (goal → constraints → options → tradeoffs → recommendation)
-- Preferred handoff writes `.path/work/{feature-slug}/brief.md`, `tasks.md`, and `progress.md`
+- Writes the cross-session handoff to `.path/work/{feature-slug}/brief.md`, `tasks.md`, and `progress.md`
 - Defines `brief.md` acceptance criteria as the success contract with `## Acceptance Criteria`
 - Adds a `Covers` column to `tasks.md` and maps every task to one or more AC IDs
 - Verifies every AC is covered by at least one task
 - Uses explicit recovery fields in `progress.md` for cross-session handoff
 - Applies a Minimal Implementation Check before recommending an approach
 - Can create `.path/work/{feature-slug}/` with `mkdir -p` before writing those artifacts
-- Legacy `*plan*.md` files remain supported as a fallback
 - Invokes `explore` for codebase reconnaissance
 - Invokes `reviewer` to stress-test designs
 - Technology-agnostic planning: does not assume a stack in acceptance criteria
 
 **Permissions**:
 - Read-only on codebase
-- Can write legacy `*plan*.md` files and preferred `.path/work/*/{brief,tasks,progress}.md` artifacts
+- Can write `.path/work/*/{brief,tasks,progress}.md` artifacts
 - Can run only `mkdir -p .path/work/*` to create the work-folder directory; other bash commands remain denied
 - Can invoke subagents: `explore`, `reviewer`
 
@@ -455,7 +444,7 @@ What this explicitly does not cover.
 
 **Key Features**:
 - Implements well-defined tasks with clear acceptance criteria
-- Supports both preferred work-folder handoff and legacy `plan-*.md` handoff
+- Supports work-folder handoff
 - Reads `brief.md`, `tasks.md`, and `progress.md` before work-folder implementation
 - Continues the single `in_progress` task if there is exactly one; otherwise asks the user which task/subset to take next
 - Implements only the selected task and the ACs listed in its `Covers` field
