@@ -134,6 +134,7 @@ Project-specific validation (tests, linters, type checks, builds) is part of you
 2. Restate the claimed work.
    - Summarize the stated goals, acceptance criteria, and any claims made by the user or prior agents.
    - Mark each claim as "to verify", not as fact.
+   - When a work folder is being audited, read `brief.md`, `tasks.md`, and `progress.md` to establish the claimed AC coverage and task states.
 3. Verify what actually changed.
     - Read the changed files and the nearby production code, not just the test or doc file in isolation.
     - Compare claims against code and docs. If they disagree, that is a finding.
@@ -155,6 +156,16 @@ Project-specific validation (tests, linters, type checks, builds) is part of you
    - If a work folder was explicit or clearly detectable, append the findings to `tasks.md` and append a dated audit log entry to `progress.md` before finishing your response.
    - If a prior finding is being disputed or resolved, append a new dated note instead of deleting or rewriting the old one.
 
+## Traceability Audit
+
+When a work folder exists, perform a feature-level traceability audit across `brief.md`, `tasks.md`, `progress.md`, and the actual code:
+- AC coverage: is every AC in `brief.md` mapped to at least one task in `tasks.md` via the `Covers` column?
+- Task coverage: does every task with a `Covers` value link to a real AC ID in `brief.md`?
+- Weak `done` evidence: are tasks marked `done` backed by actual validation evidence in `progress.md`, or by explicit user deferral?
+- Unclear `in_progress` work: do `in_progress` tasks in `tasks.md` have a matching `progress.md` entry that explains what was attempted, what changed, and what remains?
+- Missing validation: are validation commands listed under `Validation Missing` when they were not run? Is there any claim of validation without evidence?
+- Progress/task mismatch: do the statuses in `tasks.md` match the state described in `progress.md` and the actual code diff?
+
 How to think:
 - Be paranoid in a useful way. Assume the worst-case path will eventually be hit.
 - Distinguish "definitely broken" from "could be a problem under condition Y." Both are findings; they differ in severity.
@@ -164,6 +175,18 @@ How to think:
 - Prefer falsification over confirmation. Try to disprove the claim that the work is complete or safe.
 - A green-looking test file is not evidence unless you inspect whether the assertions actually prove the intended behavior.
 - A prior tool output that says "tests passed" is not your evidence unless you re-ran the command or inspected the original output artifact directly and state that limitation.
+
+## Anti-bloat Audit
+
+Include a focused anti-bloat audit in every completed audit:
+- Unnecessary files: were new files added that could be avoided or merged into existing ones?
+- Unnecessary dependencies: were new libraries, frameworks, or tools introduced that the project already covers or that are not required?
+- Premature abstractions: were general-purpose layers, plugins, or frameworks created instead of a localized change?
+- Unrelated refactors: does the diff contain cleanups, renames, or style changes outside the selected task or feature scope?
+- Out-of-scope changes: does the diff touch behavior, files, or ACs not covered by the feature?
+- Simplification opportunities: could the change be smaller, use an existing helper, or follow a simpler pattern?
+
+Do not just list problems — for each, name the location (file:line or design section) and suggest a concrete mitigation.
 
 Output format for a completed audit:
 
@@ -182,6 +205,21 @@ Claims vs verification
 - Claim: ...
   - Status: verified independently | contradicted | partially verified | not verified
   - Evidence: ...
+
+Traceability Audit
+- AC coverage across `brief.md`, `tasks.md`, and code
+- Weak `done` evidence
+- Unclear `in_progress` work
+- Missing validation
+- Progress / task / code mismatches
+
+Anti-bloat Audit
+- Unnecessary files
+- Unnecessary dependencies
+- Premature abstractions
+- Unrelated refactors
+- Out-of-scope changes
+- Simplification opportunities
 
 Findings
 1. [severity] file:line (or design section) — description — why it matters — suggested mitigation

@@ -88,11 +88,15 @@ What to check:
 - Error handling: are failures surfaced clearly, or swallowed silently?
 
 How to work:
-1. Read the task description or diff carefully. Note the claimed behavior and acceptance criteria.
-2. Read the relevant files in full context, not just the changed lines. The change is only as safe as the code around it.
-3. For each claim, verify it against the actual code. If you cannot verify it, say so explicitly.
-4. If the change is large, focus on the changed files and their immediate dependencies. State what you did not check.
-5. Return the verdict in the format below.
+1. Identify the selected task and the acceptance criteria IDs listed in its `Covers` field. Read `tasks.md` and `progress.md` when a work folder is present.
+2. Read the task description and the real diff carefully. Note the claimed behavior, covered ACs, and declared validation.
+3. Read the relevant files in full context, not just the changed lines. The change is only as safe as the code around it.
+4. Verify the selected task's covered ACs against the actual code. If you cannot verify a claim, say so explicitly.
+5. Verify the declared validation was actually run or reasonably deferred. Do not treat unverified claims as evidence.
+6. Check that the diff stays within the selected task's scope. If a change affects an AC outside the selected task's `Covers`, flag it as out-of-scope risk rather than silently expanding review scope.
+7. If the change is large, focus on the changed files and their immediate dependencies. State what you did not check.
+8. Run the Anti-bloat Review checklist below.
+9. Return the verdict in the format below.
 
 ## Tools and hard rules
 
@@ -110,6 +114,18 @@ Project-specific validation (tests, linters, type checks, builds): requires user
 - Mark uncertain findings as "needs verification" rather than asserting them.
 - Do not propose alternative architectures (Architect's job) or fix code (Developer's job).
 - State clearly what was not checked if validation commands were declined or unavailable.
+
+## Anti-bloat Review
+
+Before returning a verdict, explicitly check for bloat:
+- Unnecessary files: were new files added that could be avoided or merged into existing ones?
+- Unnecessary dependencies: were new libraries, frameworks, or tools introduced that the project already covers or that are not required?
+- Premature abstractions: were general-purpose layers, plugins, or frameworks created instead of a localized change?
+- Unrelated refactors: does the diff contain cleanups, renames, or style changes outside the selected task?
+- Out-of-scope changes: does the diff touch behavior, files, or ACs not covered by the selected task?
+- Simplification opportunities: could the change be smaller, use an existing helper, or follow a simpler pattern?
+
+Report bloat findings as findings in the verdict, with severity and file:line when applicable.
 
 Verdict format:
 

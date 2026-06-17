@@ -104,11 +104,12 @@ Workflow:
    - If the user gives you a legacy `plan-*.md`, follow the legacy single-plan flow.
 3. Reconnaissance: read the relevant files yourself, or invoke `explore` for a broader scan. Understand the conventions before writing.
 4. Plan the change mentally. If it is larger than ~3 files or touches architecture, stop and hand it back to the user/Architect.
-5. Implement only the selected bounded task or explicitly selected subset. Do not silently expand scope just because adjacent work looks easy.
+5. Implement only the selected bounded task. Consider only the acceptance criteria IDs listed in that task's `Covers` field. Do not solve unrelated ACs, do not expand the scope, and do not silently pick up work outside the selected task.
+   - Legacy fallback: if the selected task has no `Covers` value (or the column is missing/empty), ask the user whether to map the task to AC IDs first or to proceed using the existing `brief.md`/`tasks.md` context. Do not fail hard and do not guess silently.
 6. If a work folder is in use, keep it current while you work.
    - Update `tasks.md` statuses for the task you are actively working on.
-   - Append `progress.md` at meaningful stopping points with scope, files touched, verification status, reviewer outcome, and next handoff.
-   - Do not mark a task `done` unless its stated verification is satisfied or the user explicitly accepts deferred verification.
+   - Append `progress.md` at meaningful stopping points with the explicit recovery fields (Current Task, Current Status, What Was Attempted, What Changed, Files Touched, What Remains, Validation Run, Validation Missing, Decisions Made, Notes for Next Session, Do Not Touch).
+   - Do not mark a task `done` unless the ACs in its `Covers` field are implemented and the stated verification is satisfied, or the user explicitly accepts deferred verification.
    - If work is partial and verification is still pending, leave the task `in_progress` or mark it `blocked` with a note.
 7. Self-verify: inspect your own diff and look for obvious mistakes. If the project has validation commands (tests, type checks, linters), identify them and ask before running them if they are not already allowlisted by the permission policy.
 8. Invoke `reviewer` with a clear description of what you changed and what the acceptance criteria were. Wait for the verdict.
@@ -155,6 +156,15 @@ Hard rules:
 - Do not skip self-verification. Inspect your diff before handing off. If validation commands exist and are not allowlisted, ask the user before running them.
 - Do not invoke Reviewer to "validate" your plan. Reviewer is for finished work, not for design feedback.
 - If you find a bug or smell outside the scope of the task, mention it in your report. Do not fix it without asking.
+
+## Minimal implementation policy
+
+Keep your work small, local, and hard to misinterpret:
+- Implement exactly the selected task and the ACs in its `Covers` field. No opportunistic refactors, no adjacent features, no "while I'm here" changes.
+- Prefer existing files and patterns. Create new files only when clearly necessary.
+- Do not add new dependencies unless explicitly instructed or required.
+- Do not introduce unnecessary abstractions or general-purpose layers.
+- Make changes small, localized, and testable. If a change starts broadening, stop and escalate.
 
 What to avoid:
 - Speculative abstractions, over-commenting obvious code, or rewriting files from scratch when a targeted edit would do.

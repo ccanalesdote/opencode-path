@@ -243,7 +243,7 @@ opencode-path agents
    # Architect will:
    # - Clarify goals and constraints
    # - Enumerate options with tradeoffs
-   # - Recommend an approach
+   # - Apply a Minimal Implementation Check before recommending
    # - Optionally create and write a work folder if you say "save" or "nueva sesión"
    ```
 
@@ -257,7 +257,7 @@ opencode-path agents
    # - Continue the single in_progress task if there is exactly one
    # - Otherwise ask which task/subset to implement before editing
    # - Or read a legacy plan if you handed off plan-001-auth.md
-   # - Implement in small steps
+   # - Implement only the selected task and the ACs in its `Covers` field
    # - Update tasks.md and append progress.md during work
    # - Inspect own diff; ask before running project-specific validation
    #   unless commands are allowlisted by the installed profile
@@ -268,6 +268,8 @@ opencode-path agents
 4. **Review Phase** (Reviewer, invoked by Developer)
    ```
    # Reviewer runs automatically when Developer invokes it
+   # Reviews the selected task against its ACs in `Covers`, the real diff,
+   # declared validation, and scope; runs an Anti-bloat Review
    # Returns: PASS | FAIL | PASS WITH NITS
    # If FAIL, Developer fixes and re-invokes Reviewer
    ```
@@ -279,6 +281,8 @@ opencode-path agents
    
    # Auditor will:
    # - Inspect files and git history
+   # - Run a feature-level Traceability Audit across brief.md, tasks.md,
+   #   progress.md, and code, plus an Anti-bloat Audit
    # - If a specific work folder is being audited, append findings to
    #   tasks.md and progress.md and also report them in chat
    # - Ask before running project-specific validation commands
@@ -301,9 +305,11 @@ Preferred v1 cross-session handoff uses a work folder:
 ```
 
 That work folder contains:
-- `brief.md` — stable design context and acceptance criteria
-- `tasks.md` — current bounded task state, verification, and auditor notes
-- `progress.md` — append-only execution and audit history
+- `brief.md` — stable design context and acceptance criteria with IDs like `AC-01`, `AC-02`
+- `tasks.md` — current bounded task state with a `Covers` column mapping each task to one or more AC IDs, plus auditor notes
+- `progress.md` — append-only execution and audit history with explicit recovery fields for cross-session handoff
+
+Each task row includes a `Covers` column so it is clear which acceptance criteria it satisfies (e.g., `AC-01, AC-03`). Architect verifies that every AC in `brief.md` is covered by at least one task.
 
 `tasks.md` uses this Auditor notes table so active, resolved, discarded, or cancelled findings can be tracked without deleting history:
 
@@ -311,6 +317,24 @@ That work folder contains:
 ## Auditor notes
 | Date | Related task | Severity | Status | Finding / resolution note | Suggested follow-up |
 |---|---|---|---|---|---|
+```
+
+`progress.md` uses explicit recovery fields so a later agent can resume safely:
+
+```md
+### <YYYY-MM-DD HH:mm> — <Agent> — <short summary>
+
+#### Current Task
+#### Current Status
+#### What Was Attempted
+#### What Changed
+#### Files Touched
+#### What Remains
+#### Validation Run
+#### Validation Missing
+#### Decisions Made
+#### Notes for Next Session
+#### Do Not Touch
 ```
 
 Architect can create `.path/work/<kebab-feature>/` directly as part of the handoff flow. The user does not need to create that folder manually.
@@ -347,7 +371,8 @@ Why does this need to exist?
 What this explicitly does not cover.
 
 ### Acceptance Criteria
-- [ ] Each item must be testable or observable.
+- AC-01: <verifiable or observable criterion>
+- AC-02: <verifiable or observable criterion>
 
 ### Edge Cases
 - What could go wrong or be misunderstood?
@@ -371,7 +396,8 @@ What this explicitly does not cover.
 **Key Features**:
 - Interview Mode for vague or exploratory requests (3–5 targeted questions)
 - Core clarification protocol (restate → identify user/goal → extract requirements → surface ambiguities → propose AC → edge cases → questions)
-- Challenges vague language ("properly", "fast", "valid", "etc.")
+- Produces acceptance criteria with stable IDs (`AC-01`, `AC-02`) and insists each one is verifiable or observable
+- Reformulates vague criteria or marks them as assumptions / open questions
 - Produces a structured handoff brief ready for Architect
 - Never invents business rules silently — all inferences are labeled as assumptions
 
@@ -406,6 +432,11 @@ What this explicitly does not cover.
 **Key Features**:
 - 5-step design protocol (goal → constraints → options → tradeoffs → recommendation)
 - Preferred handoff writes `.path/work/<kebab-feature>/brief.md`, `tasks.md`, and `progress.md`
+- Defines `brief.md` acceptance criteria as the success contract with `## Acceptance Criteria`
+- Adds a `Covers` column to `tasks.md` and maps every task to one or more AC IDs
+- Verifies every AC is covered by at least one task
+- Uses explicit recovery fields in `progress.md` for cross-session handoff
+- Applies a Minimal Implementation Check before recommending an approach
 - Can create `.path/work/<kebab-feature>/` with `mkdir -p` before writing those artifacts
 - Legacy `*plan*.md` files remain supported as a fallback
 - Invokes `explore` for codebase reconnaissance
@@ -427,7 +458,9 @@ What this explicitly does not cover.
 - Supports both preferred work-folder handoff and legacy `plan-*.md` handoff
 - Reads `brief.md`, `tasks.md`, and `progress.md` before work-folder implementation
 - Continues the single `in_progress` task if there is exactly one; otherwise asks the user which task/subset to take next
-- Updates `tasks.md` and appends `progress.md` during execution; records Reviewer verdicts there
+- Implements only the selected task and the ACs listed in its `Covers` field
+- Updates `tasks.md` and appends `progress.md` explicit recovery fields during execution; records Reviewer verdicts there
+- Does not mark a task `done` unless its covered ACs are implemented and validation evidence is recorded or explicitly deferred
 - Self-verifies by inspecting diffs; asks before running project-specific validation commands unless they are allowlisted
 - Invokes Reviewer before declaring done
 - Reports changes, verification, and Reviewer verdict
@@ -443,6 +476,8 @@ What this explicitly does not cover.
 
 **Key Features**:
 - Evidence-first audit protocol
+- Performs a feature-level Traceability Audit across `brief.md`, `tasks.md`, `progress.md`, and code
+- Performs an Anti-bloat Audit covering unnecessary files, dependencies, abstractions, refactors, and out-of-scope changes
 - Understands `.path/work/<kebab-feature>/` state and compares declared progress against actual code state
 - If auditing an explicit or clearly detectable work folder, proactively appends structured audit notes to `tasks.md` and `progress.md` and also reports findings in chat
 - Uses `Status` plus `Finding / resolution note` in `tasks.md` Auditor notes so findings can be resolved or discarded without deleting history
@@ -465,6 +500,9 @@ What this explicitly does not cover.
 
 **Key Features**:
 - Returns structured PASS/FAIL verdict
+- Reviews the selected task against its `Covers` ACs, the real diff, declared validation, and scope
+- Runs an Anti-bloat Review checklist before returning a verdict
+- Flags changes that affect ACs outside the selected task's `Covers` as out-of-scope risk
 - Remains read-only even when a work folder is present; Developer records the verdict in `progress.md`
 - Runs read-only inspection commands freely; asks before project-specific validation
 - Severity scale: blocker | major | minor | nit
