@@ -10,22 +10,6 @@ export type OpenCodeConfig = Record<string, unknown>;
 const OPENCODE_SCHEMA = "https://opencode.ai/config.json";
 
 /**
- * Permission rule pre-approving sibling worktrees created with the
- * `../{repo-name}-{slug}/` convention used by this project.
- * Kept specific to this repository basename on purpose; do not broaden.
- */
-const WORKTREE_EXTERNAL_DIRECTORY_PATTERN = "../opencode-path-*/**";
-
-/**
- * Returns true if `value` is a plain object (not null, not an array).
- * Used to decide whether we can safely merge into a config subtree
- * without destroying a non-object shorthand the user may have set.
- */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
  * Read and parse an OpenCode config file.
  * Returns undefined if the file doesn't exist.
  * Throws if the file exists but is not valid JSON.
@@ -80,65 +64,6 @@ export function ensureConfigStructure(
 }
 
 /**
- * Ensure the config pre-approves access to sibling worktrees created with the
- * `../opencode-path-{slug}/` convention by setting the
- * `WORKTREE_EXTERNAL_DIRECTORY_PATTERN` key under
- * `permission.external_directory` to `"allow"`.
- *
- * Preserves all unrelated config fields, unrelated permission keys, and
- * unrelated `external_directory` patterns. Overwrites only the exact
- * worktree rule if it already exists with a different action. Insertion
- * order of existing keys is preserved.
- *
- * Pure with respect to the input: shallow-clones `permission` and
- * `external_directory` before mutation so callers' nested objects are
- * not modified.
- *
- * Limitation: if `permission` or `external_directory` is set using a
- * non-object shorthand (e.g., a string like `"allow"` or `"ask"`), it is
- * left untouched to avoid silently destroying the user's broader intent.
- * In that case, the user must add the worktree rule manually.
- */
-export function ensureWorktreePermission(
-  config: OpenCodeConfig
-): OpenCodeConfig {
-  const result = { ...config };
-  const permission = result.permission;
-
-  // If `permission` is set but not a plain object (string shorthand, array,
-  // etc.), we cannot safely add an `external_directory` key without
-  // potentially changing meaning. Preserve as-is.
-  if (permission !== undefined && !isPlainObject(permission)) {
-    return result;
-  }
-
-  // Shallow-clone `permission` so we never mutate the caller's nested object.
-  // (When permission is undefined, we start from an empty object.)
-  const permObj: Record<string, unknown> = permission
-    ? { ...permission }
-    : {};
-  const externalDirectory = permObj.external_directory;
-
-  // Same safety for the `external_directory` shorthand.
-  if (externalDirectory !== undefined && !isPlainObject(externalDirectory)) {
-    result.permission = permObj;
-    return result;
-  }
-
-  // Shallow-clone `external_directory` for the same reason.
-  const extDirObj: Record<string, unknown> = externalDirectory
-    ? { ...(externalDirectory as Record<string, unknown>) }
-    : {};
-  // Overwrite only the exact worktree rule, preserving other patterns and
-  // insertion order.
-  extDirObj[WORKTREE_EXTERNAL_DIRECTORY_PATTERN] = "allow";
-  permObj.external_directory = extDirObj;
-  result.permission = permObj;
-
-  return result;
-}
-
-/**
  * Create or merge an OpenCode config at the given path.
  * - If the file doesn't exist, creates it with the minimum structure.
  * - If the file exists, parses it and ensures the minimum structure without
@@ -150,7 +75,6 @@ export function createOrMergeConfig(filePath: string): OpenCodeConfig {
     config = {};
   }
   config = ensureConfigStructure(config);
-  config = ensureWorktreePermission(config);
   writeConfig(filePath, config);
   return config;
 }

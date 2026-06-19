@@ -3,7 +3,6 @@ import {
   readConfig,
   writeConfig,
   ensureConfigStructure,
-  ensureWorktreePermission,
   createOrMergeConfig,
   getExploreModel,
   setExploreModel,
@@ -155,191 +154,49 @@ describe("createOrMergeConfig", () => {
     expect(agent.myAgent).toEqual({ description: "Custom agent" });
   });
 
-  it("adds the worktree permission rule to a freshly created config (AC-01)", () => {
+  it("writes a minimal config contract to a freshly created config (no permission rule)", () => {
     const filePath = fixturePath("fresh-config.json");
     createOrMergeConfig(filePath);
 
     const written = JSON.parse(readFileSync(filePath, "utf-8"));
     expect(written.$schema).toBe("https://opencode.ai/config.json");
     expect(written.agent).toBeDefined();
-    expect(written.permission).toBeDefined();
-    expect(written.permission.external_directory).toBeDefined();
-    expect(written.permission.external_directory["../opencode-path-*/**"]).toBe(
-      "allow"
-    );
-  });
-});
-
-describe("ensureWorktreePermission", () => {
-  it("adds permission.external_directory with the worktree rule when missing (AC-01)", () => {
-    const result = ensureWorktreePermission({});
-    expect(result.permission).toEqual({
-      external_directory: {
-        "../opencode-path-*/**": "allow",
-      },
-    });
+    expect(written.permission).toBeUndefined();
   });
 
-  it("preserves unrelated top-level config fields (AC-02)", () => {
-    const result = ensureWorktreePermission({
+  it("does not remove or overwrite an existing permission.external_directory (AC-04 edge case)", () => {
+    const filePath = fixturePath("existing-permission.json");
+    const existingConfig = {
       $schema: "https://opencode.ai/config.json",
-      customField: "preserved",
-      anotherField: 42,
-      agent: { explore: { description: "x" } },
-    });
-    expect(result.$schema).toBe("https://opencode.ai/config.json");
-    expect(result.customField).toBe("preserved");
-    expect(result.anotherField).toBe(42);
-    expect(result.permission).toEqual({
-      external_directory: {
-        "../opencode-path-*/**": "allow",
+      customTopLevel: "preserved",
+      agent: {
+        myAgent: { description: "Custom agent" },
       },
-    });
-  });
-
-  it("preserves unrelated permission keys when adding external_directory (AC-03)", () => {
-    const result = ensureWorktreePermission({
-      permission: {
-        bash: { "npm test*": "allow" },
-        edit: "ask",
-      },
-    });
-    const perm = result.permission as Record<string, unknown>;
-    expect(perm.bash).toEqual({ "npm test*": "allow" });
-    expect(perm.edit).toBe("ask");
-    expect(perm.external_directory).toEqual({
-      "../opencode-path-*/**": "allow",
-    });
-  });
-
-  it("preserves unrelated external_directory patterns (AC-03)", () => {
-    const result = ensureWorktreePermission({
-      permission: {
-        external_directory: {
-          "../otro-proyecto/**": "ask",
-          "~/Downloads/**": "deny",
-        },
-      },
-    });
-    const extDir = (result.permission as Record<string, unknown>)
-      .external_directory as Record<string, unknown>;
-    expect(Object.keys(extDir)).toEqual([
-      "../otro-proyecto/**",
-      "~/Downloads/**",
-      "../opencode-path-*/**",
-    ]);
-    expect(extDir["../otro-proyecto/**"]).toBe("ask");
-    expect(extDir["~/Downloads/**"]).toBe("deny");
-    expect(extDir["../opencode-path-*/**"]).toBe("allow");
-  });
-
-  it("overwrites only the exact worktree rule when it already exists as ask (AC-04)", () => {
-    const result = ensureWorktreePermission({
       permission: {
         external_directory: {
           "../opencode-path-*/**": "ask",
           "../otro-proyecto/**": "deny",
         },
       },
-    });
-    const extDir = (result.permission as Record<string, unknown>)
-      .external_directory as Record<string, unknown>;
-    expect(extDir["../opencode-path-*/**"]).toBe("allow");
-    expect(extDir["../otro-proyecto/**"]).toBe("deny");
-  });
+    };
+    writeFileSync(filePath, JSON.stringify(existingConfig, null, 2), "utf-8");
 
-  it("overwrites only the exact worktree rule when it already exists as deny (AC-04)", () => {
-    const result = ensureWorktreePermission({
-      permission: {
-        external_directory: {
-          "../opencode-path-*/**": "deny",
-        },
-      },
-    });
-    const extDir = (result.permission as Record<string, unknown>)
-      .external_directory as Record<string, unknown>;
-    expect(extDir["../opencode-path-*/**"]).toBe("allow");
-  });
+    createOrMergeConfig(filePath);
 
-  it("does not broaden the rule to other patterns (AC-08)", () => {
-    const result = ensureWorktreePermission({});
-    const extDir = (result.permission as Record<string, unknown>)
-      .external_directory as Record<string, unknown>;
-    expect(Object.keys(extDir)).toEqual(["../opencode-path-*/**"]);
-    expect(extDir["../*"]).toBeUndefined();
-    expect(extDir["../**"]).toBeUndefined();
-    expect(extDir["~/Downloads/**"]).toBeUndefined();
-  });
+    const written = JSON.parse(readFileSync(filePath, "utf-8"));
+    expect(written.$schema).toBe("https://opencode.ai/config.json");
+    expect(written.agent).toBeDefined();
+    expect(written.customTopLevel).toBe("preserved");
 
-  it("preserves insertion order when overwriting the existing worktree rule (AC-03)", () => {
-    const result = ensureWorktreePermission({
-      permission: {
-        external_directory: {
-          "../opencode-path-*/**": "ask",
-          "~/Downloads/**": "deny",
-        },
-      },
-    });
-    const extDir = (result.permission as Record<string, unknown>)
-      .external_directory as Record<string, unknown>;
+    // The cleanup must NOT force the existing worktree rule to "allow" nor
+    // delete it. It only stops adding the rule to fresh configs.
+    const extDir = written.permission.external_directory;
     expect(Object.keys(extDir)).toEqual([
       "../opencode-path-*/**",
-      "~/Downloads/**",
+      "../otro-proyecto/**",
     ]);
-  });
-
-  it("leaves a non-object permission shorthand untouched (edge case)", () => {
-    const result = ensureWorktreePermission({
-      permission: "ask",
-    });
-    expect(result.permission).toBe("ask");
-  });
-
-  it("leaves a non-object external_directory shorthand untouched (edge case)", () => {
-    const result = ensureWorktreePermission({
-      permission: {
-        external_directory: "ask",
-      },
-    });
-    const perm = result.permission as Record<string, unknown>;
-    expect(perm.external_directory).toBe("ask");
-  });
-
-  it("does not mutate the input config object (empty case)", () => {
-    const input: Record<string, unknown> = {};
-    ensureWorktreePermission(input);
-    expect(input.permission).toBeUndefined();
-  });
-
-  it("does not mutate the input when permission and external_directory already exist", () => {
-    const originalExtDir = {
-      "../opencode-path-*/**": "ask",
-      "~/Downloads/**": "deny",
-    };
-    const originalPermission = {
-      bash: { "npm test*": "allow" },
-      external_directory: originalExtDir,
-    };
-    const input = { permission: originalPermission };
-
-    ensureWorktreePermission(input);
-
-    // The input's top-level `permission` reference is untouched...
-    expect(input.permission).toBe(originalPermission);
-    // ...and its nested `external_directory` reference is untouched with the
-    // original action values still in place.
-    expect(originalPermission.external_directory).toBe(originalExtDir);
-    expect(originalExtDir["../opencode-path-*/**"]).toBe("ask");
-    expect(originalExtDir["~/Downloads/**"]).toBe("deny");
-    // The bash rule is also untouched.
-    expect(originalPermission.bash).toEqual({ "npm test*": "allow" });
-    // And no new key was added to the input's nested object.
-    expect(
-      Object.keys(originalExtDir as Record<string, unknown>)
-    ).not.toContain("__added");
-    expect(
-      Object.keys(originalExtDir as Record<string, unknown>)
-    ).toEqual(["../opencode-path-*/**", "~/Downloads/**"]);
+    expect(extDir["../opencode-path-*/**"]).toBe("ask");
+    expect(extDir["../otro-proyecto/**"]).toBe("deny");
   });
 });
 
