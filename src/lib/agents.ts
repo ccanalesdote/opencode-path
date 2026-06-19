@@ -403,3 +403,128 @@ export function isBuiltinAgentHidden(
 
   return agentConfig.disable === true;
 }
+
+// ---------------------------------------------------------------------------
+// Reusable plan/apply logic
+// ---------------------------------------------------------------------------
+
+/** Planned agent state changes computed from a user selection. */
+export interface AgentChanges {
+  toInstall: string[];
+  toDelete: string[];
+  toRestore: string[];
+  toHide: string[];
+  unchanged: string[];
+  conflicts: string[];
+}
+
+/**
+ * Compute planned agent state changes from the current statuses and the
+ * user's selection set. Reusable by both the standalone `agents` command
+ * and the guided `init` flow.
+ */
+export function computeAgentChanges(
+  statuses: ManagedAgentStatus[],
+  selectedSet: Set<string>
+): AgentChanges {
+  const toInstall: string[] = [];
+  const toDelete: string[] = [];
+  const toRestore: string[] = [];
+  const toHide: string[] = [];
+  const unchanged: string[] = [];
+  const conflicts: string[] = [];
+
+  for (const agent of statuses) {
+    const shouldBeActive = selectedSet.has(agent.name);
+
+    if (agent.state === "conflict") {
+      conflicts.push(agent.name);
+      continue;
+    }
+
+    if (agent.kind === "custom") {
+      if (agent.state === "missing" && shouldBeActive) {
+        toInstall.push(agent.name);
+      } else if (agent.state === "active" && !shouldBeActive) {
+        toDelete.push(agent.name);
+      } else {
+        unchanged.push(agent.name);
+      }
+      continue;
+    }
+
+    if (agent.kind === "builtin") {
+      if (agent.state === "hidden" && shouldBeActive) {
+        toRestore.push(agent.name);
+      } else if (agent.state === "active" && !shouldBeActive) {
+        toHide.push(agent.name);
+      } else {
+        unchanged.push(agent.name);
+      }
+    }
+  }
+
+  return { toInstall, toDelete, toRestore, toHide, unchanged, conflicts };
+}
+
+/** Result of applying agent changes. */
+export interface AgentApplyResult {
+  installed: string[];
+  deleted: string[];
+  restored: string[];
+  hidden: string[];
+  unchanged: string[];
+  conflicts: string[];
+}
+
+/**
+ * Apply planned agent changes to the target. Returns the actual result
+ * (which may differ from the plan if conflicts arise at write time).
+ */
+export function applyAgentChanges(
+  changes: AgentChanges,
+  target: InstallTarget
+): AgentApplyResult {
+  const result: AgentApplyResult = {
+    installed: [],
+    deleted: [],
+    restored: [],
+    hidden: [],
+    unchanged: [],
+    conflicts: [...changes.conflicts],
+  };
+
+  for (const name of changes.toInstall) {
+    const installResult = installCustomAgent(name as PackAgentName, target);
+    if (installResult === "created") {
+      result.installed.push(name);
+    } else if (installResult === "conflict") {
+      result.conflicts.push(name);
+    } else {
+      result.unchanged.push(name);
+    }
+  }
+
+  for (const name of changes.toDelete) {
+    const deleted = deleteCustomAgent(name, target);
+    if (deleted) {
+      result.deleted.push(name);
+    } else {
+      result.unchanged.push(name);
+    }
+  }
+
+  for (const name of changes.toRestore) {
+    restoreBuiltinAgent(name, target);
+    result.restored.push(name);
+  }
+
+  for (const name of changes.toHide) {
+    hideBuiltinAgent(name, target);
+    result.hidden.push(name);
+  }
+
+  result.unchanged.push(...changes.unchanged);
+
+  return result;
+}

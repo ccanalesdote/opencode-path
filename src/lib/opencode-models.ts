@@ -1,4 +1,8 @@
-import { execFileSync } from "node:child_process";
+import {
+  execFileSync,
+  execFile,
+  type ExecFileException,
+} from "node:child_process";
 
 export const CUSTOM_MODEL_VALUE = "__custom_model__";
 
@@ -57,4 +61,48 @@ export function buildModelOptions(
   }
 
   return options;
+}
+
+/**
+ * Return the model IDs exposed by the installed OpenCode CLI, asynchronously.
+ *
+ * This variant is safe to use with a spinner because it does not block the
+ * event loop. If `signal` is aborted, the child process is killed and the
+ * returned promise rejects. On any other OpenCode failure, it falls back to
+ * an empty list.
+ */
+export function listOpenCodeModelsAsync(options?: {
+  signal?: AbortSignal;
+}): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    if (options?.signal?.aborted) {
+      reject(new Error("Cancelled"));
+      return;
+    }
+
+    const child = execFile(
+      "opencode",
+      ["models"],
+      {
+        encoding: "utf-8",
+      },
+      (err: ExecFileException | null, stdout: string, _stderr: string) => {
+        if (options?.signal?.aborted) {
+          reject(new Error("Cancelled"));
+          return;
+        }
+
+        if (err) {
+          resolve([]);
+          return;
+        }
+
+        resolve(parseOpenCodeModelsOutput(stdout));
+      }
+    );
+
+    options?.signal?.addEventListener("abort", () => {
+      child.kill();
+    });
+  });
 }

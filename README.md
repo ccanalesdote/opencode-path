@@ -1,6 +1,6 @@
 # OpenCode Path
 
-A structured multi-agent workflow for [opencode](https://opencode.ai) that separates concerns, minimizes blast radius, and optimizes model usage by role.
+A structured multi-agent workflow CLI for [opencode](https://opencode.ai) that installs specialized agents, configures models, and applies stack-specific permission profiles. Separate concerns, minimize blast radius, and optimize model usage by role.
 
 ## Overview
 
@@ -25,755 +25,354 @@ This workflow defines 6 specialized agents with clear responsibilities:
 5. **Model-Agnostic by Default**: No models are hardcoded. Use `opencode-path models` to configure models explicitly for each agent.
 6. **Stack Profiles via Opt-In Command**: The CLI installs agnostic agent templates by default. Stack-specific permission profiles (test runners, linters, type checkers) are added separately via `opencode-path profiles`, keeping the base install clean and technology-agnostic.
 
-## Why not an orchestrator?
-
-Many opencode plugins solve multi-agent workflows with an orchestrator — a router that reads your prompt and picks the agent automatically. That model works well when you want to stay hands-off and let the system decide the next step.
-
-This pack takes the opposite stance. The flow is **user-driven**: you choose which agent to talk to, in what order, and when to switch. The Clarify → Research → Design → Implement → Review → Audit sequence is a guide you follow, not a pipeline that runs on its own. Each agent is a specialist with its own permissions, model, and personality.
-
-The whole pack is designed as a **lightweight SDD**: specs, work folders, and audits stay as readable artifacts you own. The trade-off is explicit — you give up automation in exchange for control, visibility, and predictability. If you want the system to make those decisions for you, an orchestrator plugin is a better fit, and that's a perfectly valid choice.
-
-## Installation
-
-### Install the CLI
+## Quick start
 
 ```bash
 # Install globally
 npm install -g opencode-path
 
-# Or run directly with npx
-npx opencode-path init
-
-# Or install from source
-git clone <your-repo-url>
-cd opencode-path
-npm install
-npm run build
-node dist/cli.js init
-```
-
-### Install the workflow pack
-
-```bash
-# Initialize the pack into your project or global config
+# Initialize into your project (guided setup)
 opencode-path init
+
+# Or initialize into global config
+opencode-path init --global
 ```
 
-The `init` command prompts you to choose between:
+`init` walks you through scope selection, agent installation, stack profiles, and model configuration in one guided flow. Restart opencode after any change.
 
-- **Project install**: writes to `./.opencode/agent/` and `./.opencode/opencode.json`
-- **Global install**: writes to `~/.config/opencode/agent/` and `~/.config/opencode/opencode.json`
+## Commands
 
-`init` presents a checkbox list of all managed agents (custom workflow agents plus built-in `plan`, `build`, and `explore`). You can:
+### `init`
 
-- Install missing custom agents (by checking them)
-- Restore hidden built-in agents (by checking them)
-- Already-active agents are shown as selected and cannot be removed via `init`
+Initialize the workflow pack with a guided setup: scope → agents → profiles → models → consolidated summary → confirm.
 
-Managed agents installed by `init`:
-
-- `agent/spec.md` — Spec agent (custom)
-- `agent/architect.md` — Architect agent (custom)
-- `agent/developer.md` — Developer agent (custom)
-- `agent/auditor.md` — Auditor agent (custom)
-- `agent/reviewer.md` — Reviewer agent (custom)
-- `agent/research.md` — Research agent (custom)
-- `plan` — Plan agent (built-in, managed in opencode config)
-- `build` — Build agent (built-in, managed in opencode config)
-- `explore` — Explore agent (built-in, managed in opencode config)
-- `opencode.json` — OpenCode config
-
-Installed custom agent files include a hidden marker (`<!-- managed-by: opencode-path -->`) so the CLI can distinguish workflow-managed files from manual files.
-
-If a manual file exists at a managed agent path without the managed marker, `init` will report a **conflict** and will not overwrite or modify it. Resolve conflicts manually.
-
-The `init` command installs technology-agnostic agent templates without any model configured. Built-in agents (`plan`, `build`, `explore`) are active by default even without running `init` — they are native to opencode and don't require installation. To set up models, run `opencode-path models` (works without init for built-ins). To add stack-specific validation commands (test runners, linters, type checkers), run `opencode-path profiles` after init.
-
-**Restart opencode** after installation.
-
-### Manage agents
-
-```bash
-opencode-path agents
+```
+opencode-path init [options]
 ```
 
-The `agents` command provides full management of the workflow agent lifecycle. Unlike `init` (which is add/restore only), `agents` can also deactivate agents:
+**Options:**
 
-- **Checked agents** → active (custom agents are installed, hidden built-ins are restored)
-- **Unchecked custom agents** → their `.md` files are deleted (with confirmation)
-- **Unchecked built-ins** (`plan`, `build`, `explore`) → hidden via `agent.<name>.disable: true` in `opencode.json` (not physically deleted)
-- **Conflict agents** (manual files without the managed marker) → displayed but not modifiable
+| Flag | Description |
+|------|-------------|
+| `--global` | Use global scope (`~/.config/opencode/`) |
+| `--project` | Use project scope (`.opencode/`) |
+| `--dry-run` | Run the full selection flow, show the planned summary, and exit without writing |
+| `-y, --yes` | Skip the final confirmation prompt (selections are still interactive) |
 
-Key behaviors:
+**Behavior:**
+
+1. Validates all template frontmatter. If any template is malformed, prints the file(s) and exits `1` without prompting.
+2. Resolves scope (project or global). If `--global` or `--project` is passed, uses that scope. Otherwise prompts interactively.
+3. Scans current agent state and displays conflict warnings (files without the managed marker).
+4. **Agents step** — checkbox multi-select over all managed agents. Active agents are pre-selected. Exposes a visible "Skip for now" option and a "← Cancel" option.
+5. **Profiles step** — checkbox multi-select over available stack profiles plus "All stacks". Only shown if patchable agents (`developer`, `reviewer`, `auditor`) will be active. Exposes "Skip for now" and "← Cancel".
+6. **Models step** — iterates active agents, prompting once per agent with model options from `opencode models` (if available) plus "Custom model..." and "Skip for now". Shown with a spinner while loading models. Choosing "Custom model..." opens a free-text input; cancel it with Ctrl+C.
+7. Displays a consolidated summary of all planned changes (agents, profiles, models).
+8. If no changes are planned, prints `No changes needed.` and exits `0`.
+9. Asks for final confirmation (skipped by `--yes` or `--dry-run`).
+10. Applies all changes and prints results.
+
+**Re-running `init`** is idempotent. Already-active agents are shown as selected and cannot be deselected. If nothing needs to change, it prints `No changes needed.` and exits `0`.
+
+**`--dry-run`** runs the entire selection flow, shows the consolidated summary, and exits `0` without writing any files.
+
+---
+
+### `agents`
+
+Manage which workflow agents are active: install, delete, hide, or restore.
+
+```
+opencode-path agents [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--global` | Use global scope |
+| `--project` | Use project scope |
+| `--dry-run` | Show planned changes without applying |
+| `-y, --yes` | Skip the confirmation prompt |
+
+**Behavior:**
+
+1. Resolves scope and displays agent directory and config paths.
+2. Shows a checkbox multi-select of all managed agents (custom + built-ins) with status glyphs: `●` active, `○` missing, `◌` hidden, `✕` conflict.
+3. Checked agents will be active. Unchecked custom agents are deleted. Unchecked built-ins are hidden via config.
+4. Conflict agents (manual files without the managed marker) are displayed but not modifiable.
+5. Shows planned changes. In `--dry-run` mode, exits without writing.
+6. Asks for confirmation (skipped by `--yes`), then applies changes.
 
 | Operation | Custom agent | Built-in agent (plan, build, explore) |
-|-----------|-------------|------------------------------|
+|-----------|-------------|--------------------------------------|
 | Activate | Install `.md` file from template | Remove `disable: true` from config |
 | Deactivate | Delete `.md` file | Set `disable: true` in config |
-| Preserve model/config | File is deleted (model is in the file) | All config fields (model, permissions, description) are preserved when hidden/restored |
 
-**Restart opencode** after changing agents.
-
-### Configure models
-
-```bash
-opencode-path models
-```
-
-The `models` command only shows **active managed agents** — agents that are currently installed and not hidden. If you deactivate an agent via `opencode-path agents`, it will no longer appear in the model selection.
-
-The command lets you select an agent and choose from the models exposed by OpenCode:
-
-```bash
-opencode models
-```
-
-If OpenCode cannot provide a model list, or if you need a model that is not listed, choose `Custom model...` and enter the model ID manually.
-
-| Agent | Where the model is stored | Example model |
-|-------|--------------------------|----------------|
-| spec | `agent/spec.md` frontmatter `model:` field | `anthropic/claude-haiku-4-5` |
-| architect | `agent/architect.md` frontmatter `model:` field | `anthropic/claude-sonnet-4-6` |
-| developer | `agent/developer.md` frontmatter `model:` field | `anthropic/claude-sonnet-4-6` |
-| auditor | `agent/auditor.md` frontmatter `model:` field | `anthropic/claude-sonnet-4-6` |
-| reviewer | `agent/reviewer.md` frontmatter `model:` field | `anthropic/claude-haiku-4-5` |
-| research | `agent/research.md` frontmatter `model:` field | `anthropic/claude-haiku-4-5` |
-| plan | `opencode.json` `agent.plan.model` field | `anthropic/claude-sonnet-4-6` |
-| build | `opencode.json` `agent.build.model` field | `anthropic/claude-sonnet-4-6` |
-| explore | `opencode.json` `agent.explore.model` field | `anthropic/claude-haiku-4-5` |
-
-Custom agent models (spec, architect, developer, auditor, reviewer, research) are written into the agent file's YAML frontmatter. Built-in agent models (plan, build, explore) are written into the OpenCode config file because they are built-in opencode agents, not template files.
-
-Built-in agents are active by default even without running `init`. The `models` command works without init for configuring built-in agent models.
-
-If no active managed agents are found, `models` shows a clear message and exits. Since built-ins (`plan`, `build`, `explore`) are active by default, `models` will always have agents to configure unless all built-ins have been hidden.
-
-Model IDs should use the `provider/model-id` format (e.g., `anthropic/claude-sonnet-4-6`, `openai/gpt-5.5`).
-
-The `models` command runs in a loop — after setting a model for one agent, it asks if you want to configure another.
-
-**Restart opencode** after changing models.
-
-### Apply stack profiles
-
-```bash
-opencode-path profiles
-```
-
-The `profiles` command shows a list of available stack profiles and lets you select one or more to apply. Profiles are inserted into the agent files at a designated marker line using idempotency markers, so re-running the command does not duplicate blocks.
-
-**Note**: Profiles only apply to **active managed custom agents** — specifically `developer`, `reviewer`, and `auditor`. If these agents are missing, deleted, or in conflict, they are skipped. If no active patchable agents exist, `profiles` shows a clear message and exits.
-
-See [Stack Profiles](#stack-profiles) below.
-
-**Restart opencode** after applying profiles.
-
-### Recommended Model Strategy
-
-| Agent | Recommended Model Tier | Rationale |
-|-------|----------------------|-----------|
-| **Spec** | Mid-tier (e.g., Claude Haiku, GPT-4-mini) | Structured clarification, not deep reasoning |
-| **Architect** | High-capability (e.g., Claude Sonnet, GPT-4) | Complex reasoning, tradeoff analysis |
-| **Developer** | High-capability (e.g., Claude Sonnet, GPT-4) | Code generation, multi-step implementation |
-| **Auditor** | High-capability (e.g., Claude Sonnet, GPT-4) | Fault diagnosis, pattern recognition |
-| **Research** | Mid-tier (e.g., Claude Haiku, GPT-4-mini) | Documentation lookup, summarization |
-| **Reviewer** | Mid-tier (e.g., Claude Haiku, GPT-4-mini) | Structured verification, lower token cost |
-| **Explore** | Mid-tier (e.g., Claude Haiku, GPT-4-mini) | Fast codebase scanning |
-
-### Example full configuration
-
-```bash
-opencode-path init
-# Choose: Project .opencode/
-# Select which agents to install/restore
-
-opencode-path models
-# Configure models for active agents:
-# Select: architect → anthropic/claude-sonnet-4-6
-# Select: developer → anthropic/claude-sonnet-4-6
-# Select: auditor → anthropic/claude-sonnet-4-6
-# Select: reviewer → anthropic/claude-haiku-4-5
-# Select: spec → anthropic/claude-haiku-4-5
-# Select: research → anthropic/claude-haiku-4-5
-# Select: plan → anthropic/claude-sonnet-4-6
-
-opencode-path profiles
-# Select: Python, JavaScript / TypeScript, etc.
-
-# Later, if you want to deactivate some agents:
-opencode-path agents
-# Uncheck agents you don't need
-
-# Restart opencode to apply all changes
-```
-
-## Usage
-
-### Typical Workflow
-
-0. **Spec Phase** (Spec) — when the request is vague or missing acceptance criteria
-   ```
-   # In opencode, switch to Spec (Tab key)
-   > As a user I want to see my pending payments so I know what I owe.
-
-   # Spec will:
-   # - Use Interview Mode for vague requests: ask 3-5 targeted questions
-   # - Make reasonable assumptions and list them
-   # - Produce a lightweight spec with Objective, Acceptance Criteria, etc.
-   # - Or produce a compact Spec Brief if the request is well-defined (final handoff format)
-   ```
-
-1. **Research Phase** (Research) — when you need verified, current information
-   ```
-   # Switch to Research
-   > Does Next.js 15 support this middleware pattern? What changed from v14?
-
-   # Research will:
-   # - Use available documentation tools (Context7, MCP docs) if present
-   # - If no docs tools are available, proceed with best effort
-   # - Summarize only what applies to your task
-   # - Flag version-specific caveats and unverified claims
-   ```
-
-2. **Design Phase** (Architect)
-   ```bash
-   # In opencode, switch to Architect (Tab key)
-   > I need to add user authentication to the API
-   
-   # Architect will:
-   # - Clarify goals and constraints
-    # - Enumerate options with tradeoffs
-    # - Apply a Minimal Implementation Check before recommending
-    # - Optionally create and write a work folder when you trigger a handoff
-    ```
-
-3. **Implementation Phase** (Developer)
-   ```bash
-   # Switch to Developer
-   > Implement the authentication work folder at .path/work/authentication/
-   
-   # Developer will:
-   # - Read brief.md, tasks.md, and progress.md first
-   # - Continue the single in_progress task if there is exactly one
-    # - Otherwise ask which task/subset to implement before editing
-    # - Implement only the selected task and the ACs in its `Covers` field
-    # - Update tasks.md and append progress.md during work
-   # - Inspect own diff; ask before running project-specific validation
-   #   unless commands are allowlisted by the installed profile
-   # - Invoke Reviewer for QA
-   # - Report back with changes and verdict
-   ```
-
-4. **Review Phase** (Reviewer, invoked by Developer)
-   ```
-   # Reviewer runs automatically when Developer invokes it
-   # Reviews the selected task against its ACs in `Covers`, the real diff,
-   # declared validation, and scope; runs an Anti-bloat Review
-   # Returns: PASS | FAIL | PASS WITH NITS
-   # If FAIL, Developer fixes and re-invokes Reviewer
-   ```
-
-5. **Audit Phase** (Auditor)
-   ```bash
-   # Switch to Auditor
-   > Audit the authentication implementation
-   
-   # Auditor will:
-   # - Inspect files and git history
-   # - Run a feature-level Traceability Audit across brief.md, tasks.md,
-   #   progress.md, and code, plus an Anti-bloat Audit
-   # - If a specific work folder is being audited, append findings to
-   #   tasks.md and progress.md and also report them in chat
-   # - Ask before running project-specific validation commands
-   #   (or run them automatically if an install profile was applied)
-   # - Look for failures, risks, gaps
-   # - Return verdict: ACCEPTABLE | NEEDS VALIDATION | NEEDS REVIEWER | FAIL
-   ```
-
-### Cross-Session Planning
-
-Cross-session handoff uses a work folder:
-
-```bash
-# Session 1: Design
-> Architect, design the authentication system
-> Save this under .path/work/authentication/
-
-# Session 2: Implementation (new session, no context)
-> Developer, implement .path/work/authentication/
-```
-
-That work folder contains:
-- `brief.md` — stable design context and acceptance criteria with IDs like `AC-01`, `AC-02`
-- `tasks.md` — current bounded task state with a `Covers` column mapping each task to one or more AC IDs, plus auditor notes
-- `progress.md` — append-only execution and audit history with explicit recovery fields for cross-session handoff
-
-Each task row includes a `Covers` column so it is clear which acceptance criteria it satisfies (e.g., `AC-01, AC-03`). Architect verifies that every AC in `brief.md` is covered by at least one task.
-
-`tasks.md` uses this Auditor notes table so active, resolved, discarded, or cancelled findings can be tracked without deleting history:
-
-```md
-## Auditor notes
-| Date | Related task | Severity | Status | Finding / resolution note | Suggested follow-up |
-|---|---|---|---|---|---|
-```
-
-`progress.md` uses explicit recovery fields so a later agent can resume safely:
-
-```md
-### <YYYY-MM-DD HH:mm> — <Agent> — <short summary>
-
-#### Current Task
-#### Current Status
-#### What Was Attempted
-#### What Changed
-#### Files Touched
-#### What Remains
-#### Validation Run
-#### Validation Missing
-#### Decisions Made
-#### Notes for Next Session
-#### Do Not Touch
-```
-
-Architect can create `.path/work/{feature-slug}/` directly as part of the handoff flow. The user does not need to create that folder manually.
-
-V1 intentionally stops at prompt/docs/permissions only: there is no CLI scaffolding command yet for creating `.path/work/...` folders automatically. Directory creation is handled by Architect's narrow `mkdir -p .path/work/{feature-slug}/` permission, not by a CLI command and not by manual user setup.
-
-### Spec Interview Mode
-
-When the request is vague, incomplete, or not-yet-shaped, Spec uses **Interview Mode**:
-
-- Ask at most 3–5 questions — only those that affect scope, behavior, or acceptance criteria
-- If a reasonable assumption can be made, list it under **Assumptions** rather than asking
-- Produce a lightweight spec rather than a long document
-
-Interview Mode output structure:
-
-```
-### Objective
-One sentence: what this feature/change must achieve.
-
-### Problem
-Why does this need to exist?
-
-### Non-goals
-What this explicitly does not cover.
-
-### Acceptance Criteria
-- AC-01: <verifiable or observable criterion>
-- AC-02: <verifiable or observable criterion>
-
-### Edge Cases
-- What could go wrong or be misunderstood?
-
-### Assumptions
-- What you assume instead of asking. The user can correct these.
-
-### Open Questions
-- Only if genuine ambiguity remains after reasonable assumptions.
-
-### Suggested Validation
-- How to confirm it works.
-```
-
-### Spec Brief
-
-When the request is well-defined enough to hand off, Spec produces the final **Spec Brief**: a compact, scannable artifact that captures the clarified discussion so the user can quickly confirm it was captured correctly. The Spec Brief is the official final Spec handoff format.
-
-Spec Brief structure:
-
-```
-# Spec Brief: <title>
-
-## Objective
-## Problem            # may include relevant current behavior inline
-## User / context     # optional — only when it affects behavior, scope, or ACs
-## Expected behavior
-## Acceptance criteria
-## Non-goals          # includes what would otherwise be "out of scope"
-## Edge cases
-## Assumptions
-## Open questions for Architect
-```
-
-The final Spec Brief intentionally omits `## Requirements` / `REQ-*` IDs, standalone `## Suggested Validation`, `## Notes for technical design`, `## Out of scope`, `## Current behavior`, and `## Non-functional requirements`. Relevant current behavior is folded into `## Problem`. Validation hints may be embedded inside individual acceptance criteria instead of a separate section. Acceptance criteria use stable IDs (`AC-01`, `AC-02`, …) and must be verifiable or observable.
-
-### Spec → Architect → Developer relationship
-
-- HDU / idea → **Spec** clarifies and emits a `Spec Brief`.
-- **Architect** treats the Spec Brief as structured input, not as a 1:1 mapping into `brief.md`. Architect reviews, challenges, and refines the Spec Brief; runs its normal design protocol and Minimal Implementation Check; and only persists a handoff when the design is sound. Architect may decline to persist a handoff if the Spec Brief is vague, contradictory, too broad, technically premature, or has unverifiable ACs.
-- **Architect** writes `brief.md`, `tasks.md`, and `progress.md` under `.path/work/{feature-slug}/` when the user triggers a persistent handoff.
-- **Developer** consumes Architect's `brief.md` and `tasks.md`, not the Spec Brief directly.
-
-The Architect-written `brief.md` remains the source of truth for Developer. A Spec Brief is optional input; Architect still works normally when the user skips Spec.
-
-## Agent Details
-
-### Spec
-
-**Purpose**: Requirements clarification partner. Turns vague stories, tickets, and HDUs into clear, testable, implementation-ready specifications.
-
-**Key Features**:
-- Interview Mode for vague or exploratory requests (3–5 targeted questions)
-- Core clarification protocol (restate → identify user/goal → extract requirements → surface ambiguities → propose AC → edge cases → questions)
-- Produces acceptance criteria with stable IDs (`AC-01`, `AC-02`) and insists each one is verifiable or observable
-- Reformulates vague criteria or marks them as assumptions / open questions
-- Produces a compact `Spec Brief` as the official final Spec handoff format (see [Spec Brief](#spec-brief))
-- Never invents business rules silently — all inferences are labeled as assumptions
-
-**Permissions**:
-- Read-only on codebase
-- Cannot run bash commands
-- Cannot write files
-- Can invoke subagents: `explore`
-
-### Research
-
-**Purpose**: Documentation and knowledge verification agent. Finds, verifies, and summarizes current documentation, API behavior, SDK specifics, breaking changes, and best practices.
-
-**Key Features**:
-- Uses available documentation tools (Context7, MCP docs servers) when present in the OpenCode session
-- If no docs tools are available, continues with best effort and marks uncertainty
-- Prefers official documentation and primary sources over secondary references
-- Calls out version-specific caveats
-- Produces a Research Summary with Question, Findings, Relevant Constraints, Practical Takeaway, Risks/Unknowns, and Sources
-- Does not require Context7 — works with or without it
-
-**Permissions**:
-- Read-only on codebase
-- Cannot run bash commands
-- Cannot write files
-- Can invoke subagents: `explore`
-
-### Architect
-
-**Purpose**: Strategic design partner. Shapes ideas into concrete design decisions before code is written.
-
-**Key Features**:
-- 5-step design protocol (goal → constraints → options → tradeoffs → recommendation)
-- Consumes a `Spec Brief` as structured input when one exists — challenges and refines it rather than copying it 1:1 into `brief.md`; may decline to persist a handoff if the brief is vague, contradictory, too broad, technically premature, or has unverifiable ACs
-- Writes the cross-session handoff to `.path/work/{feature-slug}/brief.md`, `tasks.md`, and `progress.md`
-- Defines `brief.md` acceptance criteria as the success contract with `## Acceptance Criteria`
-- Adds a `Covers` column to `tasks.md` and maps every task to one or more AC IDs
-- Verifies every AC is covered by at least one task
-- Uses explicit recovery fields in `progress.md` for cross-session handoff
-- Applies a Minimal Implementation Check before recommending an approach
-- Can create `.path/work/{feature-slug}/` with `mkdir -p` before writing those artifacts
-- Invokes `explore` for codebase reconnaissance
-- Invokes `reviewer` to stress-test designs
-- Technology-agnostic planning: does not assume a stack in acceptance criteria
-
-**Permissions**:
-- Read-only on codebase
-- Can write `.path/work/*/{brief,tasks,progress}.md` artifacts
-- Can run only `mkdir -p .path/work/*` to create the work-folder directory; other bash commands remain denied
-- Can invoke subagents: `explore`, `reviewer`
-
-### Developer
-
-**Purpose**: Execution agent. The only agent that broadly modifies application files.
-
-**Key Features**:
-- Implements well-defined tasks with clear acceptance criteria
-- Supports work-folder handoff
-- Reads `brief.md`, `tasks.md`, and `progress.md` before work-folder implementation; consumes Architect's `brief.md` and `tasks.md`, not the Spec Brief directly
-- Continues the single `in_progress` task if there is exactly one; otherwise asks the user which task/subset to take next
-- Implements only the selected task and the ACs listed in its `Covers` field
-- Updates `tasks.md` and appends `progress.md` explicit recovery fields during execution; records Reviewer verdicts there
-- Does not mark a task `done` unless its covered ACs are implemented and validation evidence is recorded or explicitly deferred
-- Self-verifies by inspecting diffs; asks before running project-specific validation commands unless they are allowlisted
-- Invokes Reviewer before declaring done
-- Reports changes, verification, and Reviewer verdict
-
-**Permissions**:
-- Full edit/write
-- Risk-based bash policy: read-only inspection and simple creation are always allowed; toolchain-specific commands ask first; destructive, publishing, deployment, and external-impact operations are denied
-- Can invoke subagents: `explore`, `reviewer`
-
-### Auditor
-
-**Purpose**: Fault-finding agent for existing work.
-
-**Key Features**:
-- Evidence-first audit protocol
-- Performs a feature-level Traceability Audit across `brief.md`, `tasks.md`, `progress.md`, and code
-- Performs an Anti-bloat Audit covering unnecessary files, dependencies, abstractions, refactors, and out-of-scope changes
-- Understands `.path/work/{feature-slug}/` state and compares declared progress against actual code state
-- If auditing an explicit or clearly detectable work folder, proactively appends structured audit notes to `tasks.md` and `progress.md` and also reports findings in chat
-- Uses `Status` plus `Finding / resolution note` in `tasks.md` Auditor notes so findings can be resolved or discarded without deleting history
-- Never rewrites prior audit/developer history; disputed findings are resolved with appended dated notes
-- Runs read-only inspection commands freely; asks before project-specific validation
-- Returns verdict: ACCEPTABLE | NEEDS VALIDATION | NEEDS REVIEWER | FAIL
-- Honest about what was and was not verified
-
-**Permissions**:
-- Read-only on codebase
-- Narrow proactive append-only exception only for `.path/work/*/tasks.md` and `.path/work/*/progress.md` when auditing an explicit or clearly detectable work folder
-- Universal inspection and git read commands are always allowed
-- Project-specific validation (tests, linters, type checks) requires confirmation unless an install profile was applied
-- Mutating commands, git state changes, deployment, and external-impact commands are forbidden
-- Can invoke subagents: `explore`, `reviewer`
-
-### Reviewer
-
-**Purpose**: Strict QA gate for implementation work.
-
-**Key Features**:
-- Returns structured PASS/FAIL verdict
-- Reviews the selected task against its `Covers` ACs, the real diff, declared validation, and scope
-- Runs an Anti-bloat Review checklist before returning a verdict
-- Flags changes that affect ACs outside the selected task's `Covers` as out-of-scope risk
-- Remains read-only even when a work folder is present; Developer records the verdict in `progress.md`
-- Runs read-only inspection commands freely; asks before project-specific validation
-- Severity scale: blocker | major | minor | nit
-- Specific findings with file:line locations
-- Clearly states what was not checked
-
-**Permissions**:
-- Read-only on codebase
-- Universal inspection and git read commands are always allowed
-- Project-specific validation requires confirmation unless an install profile was applied
-- Mutating commands, git state changes, deployment, and external-impact commands are forbidden
-- Cannot invoke subagents (leaf node)
-
-### Explore
-
-**Purpose**: Fast codebase exploration.
-
-**Key Features**:
-- Built-in opencode agent, managed by opencode-path alongside `plan` and `build`
-- Finds files, searches code, answers questions
-- Thoroughness levels: quick | medium | very thorough
-
-**Permissions**:
-- Read-only on codebase
-- No bash
-- No file editing
-
-## Stack Profiles
-
-After running `opencode-path init`, you can add stack-specific permission profiles to the installed agent files:
-
-```bash
-opencode-path profiles
-```
-
-The `profiles` command shows a list of available stack profiles and lets you select one or more to apply. Profiles are inserted into the agent files at a designated marker line using idempotency markers, so re-running the command does not duplicate blocks.
-
-### Available profiles
-
-| Profile | Validation commands added |
-|---------|--------------------------|
-| **JavaScript / TypeScript** | npm test, pnpm lint, yarn typecheck, npx jest, npx vitest, npx eslint, npx prettier --check, etc. |
-| **Python** | pytest, ruff check, mypy, pyright, python -m unittest |
-| **Go** | go test, go vet (+ go fmt as "ask" for Developer only) |
-| **Rust** | cargo test, cargo check, cargo clippy, cargo fmt --check (+ cargo fmt as "ask" for Developer only) |
-| **Swift** | swift test, swift format lint (+ swift build, swift format as "ask" for Developer only) |
-| **Java / Kotlin** | ./gradlew test, ./gradlew check, ./gradlew ktlintCheck, gradle test, mvn test, mvn verify |
-| **Ruby** | bundle exec rspec, bundle exec rubocop, ruby -c, rails test |
-| **PHP** | composer test, vendor/bin/phpunit, vendor/bin/phpstan, vendor/bin/psalm, vendor/bin/phpcs |
-| **All stacks** | Applies every profile above at once |
-
-### Role-specific profile behavior
-
-Profiles are not applied uniformly across agents. Each profile has two variants:
-
-- **Developer** receives the full profile, including controlled mutating commands (such as formatters or builds that write artifacts) listed as `ask` so the user confirms before they run.
-- **Auditor and Reviewer** receive only the read-only validation subset. Commands that write files — formatters, build commands producing artifacts, or anything that mutates state — are intentionally excluded from their variant. This does not change the base prompt-level exception that lets Auditor append narrow audit notes to `.path/work/*/tasks.md` and `.path/work/*/progress.md`.
-
-Examples of commands that differ by role:
-
-| Command | Developer | Auditor / Reviewer |
-|---|---|---|
-| `go test*`, `go vet*` | `allow` | `allow` |
-| `go fmt*`, `gofmt*` | `ask` | not included |
-| `cargo fmt --check*` | `allow` | `allow` |
-| `cargo fmt*` | `ask` | not included |
-| `swift test*` | `allow` | `allow` |
-| `swift format lint*` | `allow` | `allow` |
-| `swift build*`, `swift format*` | `ask` | not included |
-
-This ensures Reviewer remains strictly read-only regardless of which profile is selected, while Auditor keeps only its narrow work-folder audit-note exception.
-
-### What profiles add and do not add
-
-**Profiles add**:
-- Stack-specific test runners, linters, type checkers, and format-check commands.
-
-**Profiles do not enable**:
-- Dependency installation (`npm install`, `pip install`, etc.)
-- Publishing or deployment
-- Destructive git operations
-- Broad write access for Auditor or Reviewer (Auditor keeps only the narrow work-folder audit-note exception)
-- Broad filesystem mutations
-
-Example — Python profile adds to the `bash` block:
-
-```yaml
-    # BEGIN optional profile: python
-    "pytest*": "allow"
-    "python -m pytest*": "allow"
-    "python3 -m pytest*": "allow"
-    "ruff check*": "allow"
-    "mypy*": "allow"
-    "pyright*": "allow"
-    "python -m unittest*": "allow"
-    "python3 -m unittest*": "allow"
-    # END optional profile: python
-```
-
-### Idempotency
-
-Profile markers prevent duplicate inserts on re-runs. If a profile block with the same name already exists in an agent file, it will be skipped without changes. To remove a profile, edit the installed agent files and delete the lines between the `BEGIN` and `END` markers.
-
-If the marker line (`# Optional stack-specific profiles are inserted here by opencode-path profiles`) has been removed from an agent file, the `profiles` command will report an error for that file rather than guessing where to insert.
-
-### External-impact command denylist
-
-In addition to the risk-based `ask` catch-all, all three agents (Developer, Auditor, Reviewer) explicitly deny a short list of commands known to affect external systems:
-
-- **Deployment**: `vercel deploy*`, `netlify deploy*`, `firebase deploy*`
-- **Release**: `gh release*`
-- **Container registry**: `docker push*`
-- **Infrastructure**: `kubectl apply*`, `terraform apply*`, `pulumi up*`
-
-These are denied unconditionally in the base agent templates. They require the user to run them manually outside of opencode.
-
-## Customization
-
-### Adding project-specific validation commands
-
-Edit the installed agent files and add patterns after the profile blocks (or after the marker line if no profiles are installed), but before the deny rules. opencode uses **last matching rule wins**, so broad defaults must appear before specific allow/deny rules:
-
-```yaml
-bash:
-  "*": "ask"
-  # ... read-only inspection patterns ...
-  # Optional stack-specific profiles are inserted here by opencode-path profiles
-  # (profile blocks appear here after running opencode-path profiles)
-  
-  # Add your project-specific patterns here:
-  "make test*": "allow"        # project-specific make target
-  "npm run e2e*": "allow"      # specific e2e test command
-  
-  # ... deny rules at the end ...
-```
-
-### Adjusting scope
-
-- **Stricter**: Change the initial catch-all default from `"*": "ask"` to `"*": "deny"`. More specific allow rules listed after it will still override the default because opencode uses last-match-wins.
-- **Looser**: Add more patterns to the allowlist
-- **Per-agent**: Edit only the agent file you want to change
-
-### Extending the Workflow
-
-Add new agents by creating `.md` files in the agent directory:
-
-```yaml
----
-description: Your agent description
-mode: primary  # or subagent
-model: your/model
-permission:
-  edit: deny
-  write: deny
-  bash: deny
-  task: allow
 ---
 
-Your agent prompt here...
+### `models`
+
+Configure model IDs for active managed agents.
+
+```
+opencode-path models [options]
 ```
 
-## Development
+**Options:**
 
-```bash
-# Install dependencies
-npm install
+| Flag | Description |
+|------|-------------|
+| `--global` | Use global scope |
+| `--project` | Use project scope |
 
-# Run the CLI in development mode
-npx tsx src/cli.ts --help
-npx tsx src/cli.ts init
-npx tsx src/cli.ts agents
-npx tsx src/cli.ts models
-npx tsx src/cli.ts profiles
+**Behavior:**
 
-# Build for production
-npm run build
+1. Resolves scope. Shows a spinner while loading models from `opencode models`.
+2. Shows a select menu to choose an agent or "Set all active agents to the same model".
+3. For each agent, shows available models (from OpenCode) plus "Custom model...".
+4. Custom agents store models in frontmatter. Built-in agents store models in `opencode.json`.
+5. After configuring, asks whether to configure another agent.
 
-# Run the built CLI
-node dist/cli.js --help
+| Agent | Model stored in |
+|-------|----------------|
+| spec, architect, developer, auditor, reviewer, research | Agent `.md` file frontmatter `model:` field |
+| plan, build, explore | `opencode.json` `agent.<name>.model` field |
 
-# Run tests
-npm test
+Model IDs should use `provider/model-id` format (e.g., `anthropic/claude-sonnet-4-6`).
 
-# Type check
-npx tsc --noEmit
+---
+
+### `profiles`
+
+Apply stack-specific permission profiles to installed agents.
+
 ```
+opencode-path profiles [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--global` | Use global scope |
+| `--project` | Use project scope |
+| `--dry-run` | Show planned changes without applying |
+| `-y, --yes` | Skip the confirmation prompt |
+
+**Behavior:**
+
+1. Resolves scope. Checks for active patchable agents (`developer`, `reviewer`, `auditor`).
+2. If no patchable agents are active, shows a warning and exits.
+3. Shows a checkbox multi-select of available profiles plus "All stacks".
+4. Profiles are inserted at the profile marker line in agent files using idempotency markers.
+5. In `--dry-run` mode, exits without writing.
+
+**Available profiles:**
+
+| Profile | Validation commands |
+|---------|-------------------|
+| JavaScript / TypeScript | npm test, pnpm lint, npx jest, npx vitest, npx eslint, npx prettier --check, etc. |
+| Python | pytest, ruff check, mypy, pyright |
+| Go | go test, go vet (+ go fmt as "ask" for Developer) |
+| Rust | cargo test, cargo check, cargo clippy, cargo fmt --check (+ cargo fmt as "ask" for Developer) |
+| Swift | swift test, swift format lint (+ swift build, swift format as "ask" for Developer) |
+| Java / Kotlin | ./gradlew test, ./gradlew check, gradle test, mvn test |
+| Ruby | bundle exec rspec, bundle exec rubocop |
+| PHP | composer test, vendor/bin/phpunit, vendor/bin/phpstan |
+
+**Role-specific behavior:** Developer receives the full profile including controlled mutating commands (listed as "ask"). Auditor and Reviewer receive only the read-only validation subset.
+
+---
+
+### `uninstall`
+
+Remove managed custom agent files. All config entries are preserved.
+
+```
+opencode-path uninstall [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--global` | Use global scope |
+| `--project` | Use project scope |
+| `-y, --yes` | Skip the confirmation prompt |
+
+**Behavior:**
+
+1. Resolves scope and scans the agent directory.
+2. Identifies managed custom agent files (containing the managed marker) for deletion.
+3. Identifies unmarked files — these are **skipped** and never deleted.
+4. Shows the planned removals and asks for confirmation (skipped by `--yes`).
+5. Removes managed files and preserves `opencode.json`, all config entries, and all unmarked files.
+
+**What is removed:**
+- Custom agent `.md` files that contain `<!-- managed-by: opencode-path -->`
+
+**What is preserved:**
+- `opencode.json` itself (never deleted)
+- Unmarked custom agent files
+- All built-in agent config entries (`agent.<name>.disable`, `agent.<name>.model`, etc.) — these are preserved because the CLI cannot distinguish user-set entries from opencode-path-set entries
+- Any non-managed config fields
+
+> **Note:** If opencode-path previously hid a built-in agent (by setting `agent.<name>.disable: true`), uninstall will **not** restore it. Run `opencode-path agents` to restore hidden built-in agents before uninstalling if desired.
+
+---
+
+## Concepts
+
+### Managed agents
+
+The workflow pack manages a catalog of agents:
+
+| Agent | Kind | Role |
+|-------|------|------|
+| spec | custom | Requirements clarification |
+| architect | custom | System design |
+| developer | custom | Implementation |
+| reviewer | custom | Code review (subagent) |
+| auditor | custom | Audit and verification |
+| research | custom | Documentation research |
+| plan | built-in | Planning (native to opencode) |
+| build | built-in | Build orchestration (native to opencode) |
+| explore | built-in | Codebase exploration (native to opencode) |
+
+**Custom agents** are installed as `.md` files in the agent directory with a hidden marker (`<!-- managed-by: opencode-path -->`). The marker lets the CLI distinguish workflow-managed files from manual files.
+
+**Built-in agents** (plan, build, explore) are native to opencode. They are active by default. opencode-path manages their visibility (hide/restore) and model configuration via `opencode.json`.
+
+### Scopes
+
+Commands accept `--global` or `--project` to select the installation target:
+
+- **Project** (`.opencode/`): per-project agents and config
+- **Global** (`~/.config/opencode/`): shared across all projects
+
+If neither flag is passed and the terminal is interactive, a scope selection prompt appears. If both flags are passed, the command exits with a usage error. In non-interactive mode, one of the flags is required.
+
+### Conflict detection
+
+If a file exists at a managed agent path without the managed marker, it is a **conflict**. Conflicts are displayed but never overwritten, deleted, or modified. To resolve:
+
+1. If the file was installed by a previous version of opencode-path: add the managed marker to the end of the file.
+2. If it is your own custom agent: leave it as-is.
+3. If you want to replace it: delete the file manually and re-run `init` or `agents`.
+
+### Stack profiles
+
+Profiles add stack-specific test runners, linters, and type checkers to agent permission blocks. They are applied at a designated marker line in agent files using idempotency markers (`BEGIN`/`END` blocks), so re-running the command does not duplicate entries.
+
+Profiles have two variants per stack:
+- **Developer**: full profile including controlled mutating commands (formatters, builds) listed as `ask`
+- **Auditor/Reviewer**: read-only validation subset only
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success or no-op |
+| `1` | Generic error |
+| `2` | Usage error (e.g., `--global --project` together, or missing scope in non-interactive mode) |
+| `130` | Canceled (Ctrl+C or ← Cancel) |
+
+### Cancellation
+
+Select and checkbox prompts expose a visible "← Cancel" option. Confirmation prompts and free-text input prompts are canceled with Ctrl+C. `init` is the exception: its final confirmation and the custom-model format confirmation expose a visible "← Cancel" option. A second Ctrl+C forces immediate exit. No stack traces are printed on cancellation.
 
 ## Troubleshooting
 
-### Agent not appearing in opencode
+### `opencode` not found in PATH
 
-- Restart opencode after installation
-- Check that files are in the correct `agent/` directory
-- Verify frontmatter syntax (no missing `---` delimiters)
+The `models` command runs `opencode models` to discover available model IDs. If `opencode` is not installed or not in your PATH:
 
-### Model not loading
+```
+Could not read models from opencode. Falling back to manual input.
+```
 
-- Ensure the model ID is correct (format: `provider/model`)
-- Check that the provider is enabled in your opencode config
-- Verify API keys are set for the provider
+**Fix:** Install opencode and ensure it is in your PATH. You can still configure models manually using "Custom model..." in the prompt.
 
-### Permission errors
+### `opencode models` returns an empty list
 
-- Check that bash patterns are quoted in YAML
-- Remember: insertion order matters. opencode uses last-match-wins, so put broad rules first and narrow rules last.
-- Use `"*": "ask"` as the first bash rule for a safe default catch-all.
+If the `opencode models` command runs but returns no output, the models command falls back to manual input. This can happen if:
 
-### Project-specific command asks for confirmation
+- No providers are configured in opencode
+- API keys are not set for any provider
+- The opencode installation is incomplete
 
-Run `opencode-path profiles` to add stack-specific validation commands. If a command still asks for confirmation after applying the relevant profile, you can add it to the agent file's bash section.
+**Fix:** Configure at least one provider in your opencode config and set the required API keys.
 
-### I lost my model configuration after re-running init
+### Restart reminder
 
-Active managed agents (files with the `<!-- managed-by: opencode-path -->` marker) are never overwritten by `init`. If you previously installed agents without the marker, they will be reported as conflicts and left untouched.
+After running `init`, `agents`, `models`, `profiles`, or `uninstall`, you must **restart opencode** for changes to take effect. Each command prints:
 
-### Conflict: manual file at a managed agent path
+```
+⚠️  Restart opencode to apply changes.
+```
 
-If you see a **conflict** in `init` or `agents`, it means a file exists at the agent path (e.g., `.opencode/agent/developer.md`) but does not contain the managed marker (`<!-- managed-by: opencode-path -->`). The CLI will not overwrite, delete, or modify conflict files.
+### Managed marker conflicts
 
-To resolve a conflict:
-1. If the file was installed by a previous version of opencode-path: you can safely add the managed marker to the end of the file, then re-run the command.
-2. If the file is your own custom agent and you want to keep it: leave it as-is. The CLI will ignore it.
-3. If you want to replace it with the workflow template: delete the file manually and re-run `opencode-path init` or `opencode-path agents`.
+If `init` or `agents` shows a **conflict**, a file exists at the agent path without the managed marker. The CLI will not modify it.
+
+**Fix options:**
+
+1. Add the managed marker to the end of the file: `<!-- managed-by: opencode-path -->`
+2. Delete the file manually and re-run `opencode-path init` or `opencode-path agents`
+3. Leave it as-is if it is your own custom agent
+
+### Complete uninstall
+
+To fully remove all opencode-path managed files:
+
+```bash
+opencode-path uninstall --project   # or --global
+```
+
+This removes managed custom agent files. It does **not** delete `opencode.json`, unmarked files, or any built-in agent config entries (`disable`, `model`).
+
+To remove both project and global installations:
+
+```bash
+opencode-path uninstall --project
+opencode-path uninstall --global
+```
+
+To also restore hidden built-in agents before uninstalling:
+
+```bash
+opencode-path agents --project   # restore built-ins first
+opencode-path uninstall --project
+```
+
+If you need to manually clean built-in agent config entries after uninstall, edit `opencode.json` directly and remove the `agent.<name>.disable` or `agent.<name>.model` fields.
 
 ### Hidden vs deleted agents
 
-- Built-in agents (`plan`, `build`, `explore`) are **hidden** by setting `agent.<name>.disable: true` in `opencode.json`. Their model and other config fields are preserved. Restoring them simply removes the `disable` flag.
-- Custom workflow agents are **deleted** by removing their `.md` file. The model (stored in the file's frontmatter) is lost. To reinstall, use `opencode-path init` or `opencode-path agents`.
+- **Built-in agents** (plan, build, explore) are hidden by setting `agent.<name>.disable: true` in `opencode.json`. Their model and other config fields are preserved. Restoring them removes the `disable` flag. The `uninstall` command does **not** touch built-in agent config — use `opencode-path agents` to restore hidden built-ins before uninstalling.
+- **Custom agents** are deleted by removing their `.md` file. The model (stored in the file's frontmatter) is lost. Reinstall with `opencode-path init` or `opencode-path agents`.
 
-### External/manual agents are not managed
+### Non-interactive usage
 
-Agents created manually outside the managed catalog (e.g., `general`, `task`, or any custom name not in the workflow) are never shown or modified by opencode-path commands. The managed catalog includes custom workflow agents (`spec`, `architect`, `developer`, `reviewer`, `auditor`, `research`) and built-in opencode agents (`plan`, `build`, `explore`).
+In CI or scripts, pass `--global` or `--project` explicitly. Without an explicit scope in non-interactive mode, commands exit with code `2`:
 
-### Agent behavior issues
-
-- Review the agent's prompt for clarity
-- Test with simple tasks first
-- Check opencode logs for errors
+```
+Non-interactive mode requires --global or --project.
+```
 
 ## Contributing
 
-Contributions welcome! Areas for improvement:
+Contributions welcome! See the repository for issues and development setup.
 
-- More detailed cross-session planning examples
-- Performance benchmarks with different model combinations
+```bash
+# Development
+npm install
+npm run build
+npm test
+npm run typecheck
+```
 
 ## License
 
 MIT
-
-## Credits
-
-Designed for [opencode](https://opencode.ai), an open-source AI coding assistant.
