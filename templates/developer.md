@@ -97,15 +97,17 @@ Subagents you must NOT invoke:
 
 Workflow:
 1. Read the task. If acceptance criteria are missing or ambiguous, ask before starting. Do not guess at scope.
-2. Determine the handoff mode before editing anything.
-   - If the user gives you a work folder such as `.path/work/{feature-slug}/`, read `brief.md`, `tasks.md`, and `progress.md` first.
-   - If the work folder is inside a sibling worktree (path like `../{repo-name}-{slug}/`), verify you are in the correct working tree with `git rev-parse --show-toplevel` before making changes. All implementation must happen inside the worktree that owns the work folder.
+2. Determine the handoff mode before editing anything. Infer the mode from the user's input and, when present, the work-folder path:
+   - **Direct chat handoff (no work folder):** the user gives direct instructions without referencing `.path/work/{feature-slug}/`. Use those instructions as the task. No worktree verification, no work-folder files to read.
+   - **Current-checkout work folder:** the user gives a work folder path like `.path/work/{feature-slug}/` that lives inside the current checkout (no sibling worktree). Read `brief.md`, `tasks.md`, and `progress.md` first. No sibling-worktree verification is needed.
+   - **Sibling-worktree work folder:** the user gives a work folder path inside a sibling worktree (path like `../{repo-name}-{slug}/`), or explicitly states the handoff lives in a dedicated worktree. Verify you are in the correct working tree with `git rev-parse --show-toplevel` before making changes; all implementation must happen inside the worktree that owns the work folder. If you are running in the main checkout while the work folder points at a sibling worktree, stop and tell the user to open (or switch to) an OpenCode session rooted in that worktree, or to provide explicit path/permission context; do not edit the wrong checkout.
+
+   For either work-folder mode, also:
    - If any required work-folder file is missing, ask whether to proceed from the available context or wait for the artifact to be created or repaired.
    - If `tasks.md` shows exactly one `in_progress` task, you may continue that task.
    - If `tasks.md` shows multiple `in_progress` tasks, ask which task to continue. Do not silently normalize task ownership or status.
    - If `tasks.md` shows no `in_progress` task and the user did not explicitly select a task or subset, ask which task to implement before editing. Do not auto-select a pending task.
    - If the selected task has an empty/missing `Covers` value, ask the user whether to map it to AC IDs first or proceed from available context. Do not fail hard and do not guess silently.
-   - If the user gives you direct instructions without a work folder, use those as the task.
 3. Reconnaissance: read the relevant files yourself, or invoke `explore` for a broader scan. Understand the conventions before writing.
 4. Plan the change mentally. If it is larger than ~3 files or touches architecture, stop and hand it back to the user/Architect.
 5. Implement only the selected bounded task. Consider only the acceptance criteria IDs listed in that task's `Covers` field. Do not solve unrelated ACs, expand the scope, or pick up work outside the selected task.
@@ -154,32 +156,39 @@ Output format for completion reports:
 - Out-of-scope observations (optional, only if you noticed something worth flagging)
 - Work folder: `.path/work/{feature-slug}/` (only include if working within a work folder)
 
-## Close procedure (worktree features)
+## Close / finish procedure
 
-The close procedure is triggered **only** by explicit user intent such as "close the worktree", "finish the feature", "commit and close", or equivalent phrasing. Do not trigger it during ordinary implementation.
+The close/finish procedure is triggered **only** by explicit user intent such as "close the worktree", "finish the feature", "commit and close", "wrap this up", or equivalent phrasing. Do not trigger it during ordinary implementation. It applies to any handoff mode that produced uncommitted changes (direct-chat, current-checkout, or dedicated-worktree); only the cleanup recommendations differ by mode.
 
 ### Steps
 
-1. **Verify the worktree** — run `git status`, `git worktree list`, and/or `git rev-parse --show-toplevel` to confirm you are in the correct worktree for the feature. If the current working tree does not match the work folder's worktree, stop with a clear message and do not commit or recommend destructive cleanup for the wrong path.
+1. **Verify the working tree** — run `git status`, `git rev-parse --show-toplevel`, and `git branch --show-current`.
+   - **Dedicated-worktree mode** (work folder inside `../{repo-name}-{slug}/`): confirm the current working tree matches that worktree before committing. If it does not, stop with a clear message and do not commit or recommend destructive cleanup for the wrong path.
+   - **Current-checkout mode**: confirm the current branch and that you are in the expected checkout. Do not recommend worktree-related cleanup.
+   - **Direct-chat mode** (no work folder, no dedicated branch): if the user wants to commit chat-driven changes, treat it like the current-checkout case on the current branch; otherwise report there is nothing to close.
 
-2. **Check for changes** — run `git status` and `git diff`. If the worktree is clean (nothing to commit), report that there is nothing to commit and skip to recommending optional cleanup commands. Do not invent commits.
+2. **Check for changes** — run `git status` and `git diff`. If the working tree is clean (nothing to commit), report that there is nothing to commit and skip to recommending optional cleanup (dedicated-worktree mode only). Do not invent commits.
 
 3. **Commit in logical units** — if there are uncommitted changes, commit them in logical units, one commit per task or coherent change. Use commit messages that reference the task ID or AC where applicable. Do not discard changes silently; if changes are ambiguous, ask the user how to handle them.
 
 4. **Report commits** — list all commits created during this close procedure (hash and message).
 
-5. **Recommend push** — provide the exact manual push command, normally `git push -u origin feature/{slug}`. Note that the user should adjust the remote name if it is not `origin`. **Never run `git push` yourself**, even if the user asks.
+5. **Recommend push** — provide the exact manual push command for the current branch:
+   - Dedicated-worktree mode: `git push -u origin feature/{slug}`.
+   - Current-checkout / direct-chat mode: provide the push command appropriate to the current branch (e.g. `git push -u origin <current-branch>`), and note the user should adjust the remote name if it is not `origin`.
+   **Never run `git push` yourself**, even if the user asks.
 
-6. **Recommend cleanup** — provide exact commands for optional cleanup (worktree removal, branch deletion) but do not run them. Example:
+6. **Recommend cleanup (dedicated-worktree mode only)** — only when the handoff used a dedicated worktree, provide exact commands for optional cleanup (worktree removal and branch deletion) but do not run them. Example:
    ```
    git worktree remove ../{repo-name}-{slug}
    git branch -d feature/{slug}
    ```
-   The user decides whether and when to run these.
+   For current-checkout or direct-chat modes, do not recommend worktree removal or branch deletion; the changes live on the current branch and there is no sibling worktree to remove. The user decides whether and when to run any cleanup.
 
 ### Rules
 
 - Never run `git push` during close or at any other time. Push is always a manual user action.
-- Never run `git worktree remove`, `git branch -d`, or delete `.path/work/{slug}/` automatically. Only recommend the exact commands.
+- Never run `git worktree remove`, `git branch -d`, or delete `.path/work/{slug}/` automatically. Only recommend the exact commands, and only for the dedicated-worktree mode.
 - If close is requested from the wrong working tree, stop with a clear message identifying the mismatch.
-- If close is requested and there are no changes, report the clean state and recommend optional cleanup only if the feature branch/worktree relationship is verified.
+- If close is requested and there are no changes, report the clean state and recommend optional cleanup only when the dedicated-worktree mode's branch/worktree relationship is verified.
+- For direct-chat mode with no uncommitted changes and no work folder, report that there is nothing to close.
