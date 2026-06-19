@@ -220,7 +220,7 @@ opencode-path agents
    # - Use Interview Mode for vague requests: ask 3-5 targeted questions
    # - Make reasonable assumptions and list them
    # - Produce a lightweight spec with Objective, Acceptance Criteria, etc.
-   # - Or produce a full handoff brief if the request is well-defined
+   # - Or produce a compact Spec Brief if the request is well-defined (final handoff format)
    ```
 
 1. **Research Phase** (Research) — when you need verified, current information
@@ -377,6 +377,37 @@ What this explicitly does not cover.
 - How to confirm it works.
 ```
 
+### Spec Brief
+
+When the request is well-defined enough to hand off, Spec produces the final **Spec Brief**: a compact, scannable artifact that captures the clarified discussion so the user can quickly confirm it was captured correctly. The Spec Brief is the official final Spec handoff format.
+
+Spec Brief structure:
+
+```
+# Spec Brief: <title>
+
+## Objective
+## Problem            # may include relevant current behavior inline
+## User / context     # optional — only when it affects behavior, scope, or ACs
+## Expected behavior
+## Acceptance criteria
+## Non-goals          # includes what would otherwise be "out of scope"
+## Edge cases
+## Assumptions
+## Open questions for Architect
+```
+
+The final Spec Brief intentionally omits `## Requirements` / `REQ-*` IDs, standalone `## Suggested Validation`, `## Notes for technical design`, `## Out of scope`, `## Current behavior`, and `## Non-functional requirements`. Relevant current behavior is folded into `## Problem`. Validation hints may be embedded inside individual acceptance criteria instead of a separate section. Acceptance criteria use stable IDs (`AC-01`, `AC-02`, …) and must be verifiable or observable.
+
+### Spec → Architect → Developer relationship
+
+- HDU / idea → **Spec** clarifies and emits a `Spec Brief`.
+- **Architect** treats the Spec Brief as structured input, not as a 1:1 mapping into `brief.md`. Architect reviews, challenges, and refines the Spec Brief; runs its normal design protocol and Minimal Implementation Check; and only persists a handoff when the design is sound. Architect may decline to persist a handoff if the Spec Brief is vague, contradictory, too broad, technically premature, or has unverifiable ACs.
+- **Architect** writes `brief.md`, `tasks.md`, and `progress.md` under `.path/work/{feature-slug}/` when the user triggers a persistent handoff.
+- **Developer** consumes Architect's `brief.md` and `tasks.md`, not the Spec Brief directly.
+
+The Architect-written `brief.md` remains the source of truth for Developer. A Spec Brief is optional input; Architect still works normally when the user skips Spec.
+
 ## Agent Details
 
 ### Spec
@@ -388,7 +419,7 @@ What this explicitly does not cover.
 - Core clarification protocol (restate → identify user/goal → extract requirements → surface ambiguities → propose AC → edge cases → questions)
 - Produces acceptance criteria with stable IDs (`AC-01`, `AC-02`) and insists each one is verifiable or observable
 - Reformulates vague criteria or marks them as assumptions / open questions
-- Produces a structured handoff brief ready for Architect
+- Produces a compact `Spec Brief` as the official final Spec handoff format (see [Spec Brief](#spec-brief))
 - Never invents business rules silently — all inferences are labeled as assumptions
 
 **Permissions**:
@@ -421,6 +452,7 @@ What this explicitly does not cover.
 
 **Key Features**:
 - 5-step design protocol (goal → constraints → options → tradeoffs → recommendation)
+- Consumes a `Spec Brief` as structured input when one exists — challenges and refines it rather than copying it 1:1 into `brief.md`; may decline to persist a handoff if the brief is vague, contradictory, too broad, technically premature, or has unverifiable ACs
 - Writes the cross-session handoff to `.path/work/{feature-slug}/brief.md`, `tasks.md`, and `progress.md`
 - Defines `brief.md` acceptance criteria as the success contract with `## Acceptance Criteria`
 - Adds a `Covers` column to `tasks.md` and maps every task to one or more AC IDs
@@ -445,7 +477,7 @@ What this explicitly does not cover.
 **Key Features**:
 - Implements well-defined tasks with clear acceptance criteria
 - Supports work-folder handoff
-- Reads `brief.md`, `tasks.md`, and `progress.md` before work-folder implementation
+- Reads `brief.md`, `tasks.md`, and `progress.md` before work-folder implementation; consumes Architect's `brief.md` and `tasks.md`, not the Spec Brief directly
 - Continues the single `in_progress` task if there is exactly one; otherwise asks the user which task/subset to take next
 - Implements only the selected task and the ACs listed in its `Covers` field
 - Updates `tasks.md` and appends `progress.md` explicit recovery fields during execution; records Reviewer verdicts there
