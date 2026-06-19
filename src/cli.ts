@@ -19,7 +19,7 @@ const program = new Command();
 program
   .name("opencode-path")
   .description("Structured multi-agent workflow CLI for opencode")
-  .version("0.3.0");
+  .version("0.3.1");
 
 program
   .command("init")
