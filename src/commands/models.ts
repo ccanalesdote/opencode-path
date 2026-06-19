@@ -1,10 +1,13 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import pc from "picocolors";
-import { select, input, confirm } from "@inquirer/prompts";
-import { resolveTarget, detectDefaultScope, type InstallScope, type InstallTarget } from "../lib/paths.js";
+import {
+  resolveTarget,
+  type InstallScope,
+  type InstallTarget,
+} from "../lib/paths.js";
 import { getAgentModel, setAgentModel } from "../lib/frontmatter.js";
 import { getConfigAgentModel, setConfigAgentModel } from "../lib/config.js";
+import * as messages from "../lib/messages.js";
 import {
   listActiveManagedModelAgents,
   type ManagedAgentStatus,
@@ -12,8 +15,26 @@ import {
 import {
   CUSTOM_MODEL_VALUE,
   buildModelOptions,
-  listOpenCodeModels,
+  listOpenCodeModelsAsync,
 } from "../lib/opencode-models.js";
+import {
+  printHeader,
+  printPaths,
+  printWarning,
+  printComplete,
+  printSummary,
+  printRestartWarning,
+  CancellationError,
+  buildAgentRow,
+  uiSelect,
+  uiInput,
+  uiConfirm,
+  resolveScope,
+  withSpinner,
+  type GlobalProjectOptions,
+} from "../lib/ui.js";
+
+const ALL_AGENTS_VALUE = "__all_active_agents__";
 
 /**
  * Get the current model for a managed agent at the given target.
@@ -25,7 +46,6 @@ function getCurrentModel(
   if (agent.kind === "builtin") {
     return getConfigAgentModel(target.configPath, agent.name);
   }
-  // Custom agent: read from frontmatter
   const agentPath = join(target.agentDir, `${agent.name}.md`);
   return getAgentModel(agentPath);
 }
@@ -42,9 +62,7 @@ function setCurrentModel(
     setConfigAgentModel(target.configPath, agent.name, model);
     return;
   }
-  // Custom agent: write to frontmatter
   const agentPath = join(target.agentDir, `${agent.name}.md`);
-  // Do NOT create the file from a template if missing — only set model on existing files
   if (!existsSync(agentPath)) {
     throw new Error(`Agent file not found: ${agentPath}`);
   }
@@ -52,41 +70,44 @@ function setCurrentModel(
 }
 
 async function promptCustomModel(agentName: string): Promise<string> {
-  let newModel = await input({
-    message: `Enter model for ${agentName} (e.g., anthropic/claude-sonnet-4-6):`,
-    validate: (value: string) => {
-      const trimmed = value.trim();
-      if (trimmed.length === 0) {
-        return "Model cannot be empty. Enter a model ID like 'anthropic/claude-sonnet-4-6'.";
-      }
-      return true;
-    },
-  });
+  let newModel = await uiInput(
+    `Enter model for ${agentName} (e.g., anthropic/claude-sonnet-4-6):`,
+    {
+      validate: (value: string) => {
+        const trimmed = value.trim();
+        if (trimmed.length === 0) {
+          return "Model cannot be empty. Enter a model ID like 'anthropic/claude-sonnet-4-6'.";
+        }
+        return true;
+      },
+    }
+  );
 
   let trimmedModel = newModel.trim();
 
   // Warn about missing provider prefix — ask for confirmation as a separate step
   if (trimmedModel.length > 0 && !trimmedModel.includes("/")) {
-    const proceed = await confirm({
-      message:
-        "OpenCode models normally use 'provider/model-id' format (e.g., 'anthropic/claude-sonnet-4-6'). Continue anyway?",
-      default: false,
-    });
+    const proceed = await uiConfirm(
+      "OpenCode models normally use 'provider/model-id' format (e.g., 'anthropic/claude-sonnet-4-6'). Continue anyway?",
+      { default: false }
+    );
 
     if (!proceed) {
-      newModel = await input({
-        message: `Enter model for ${agentName} (provider/model-id format):`,
-        validate: (value: string) => {
-          const trimmed = value.trim();
-          if (trimmed.length === 0) {
-            return "Model cannot be empty.";
-          }
-          if (!trimmed.includes("/")) {
-            return "Model must use 'provider/model-id' format.";
-          }
-          return true;
-        },
-      });
+      newModel = await uiInput(
+        `Enter model for ${agentName} (provider/model-id format):`,
+        {
+          validate: (value: string) => {
+            const trimmed = value.trim();
+            if (trimmed.length === 0) {
+              return "Model cannot be empty.";
+            }
+            if (!trimmed.includes("/")) {
+              return "Model must use 'provider/model-id' format.";
+            }
+            return true;
+          },
+        }
+      );
       trimmedModel = newModel.trim();
     }
   }
@@ -105,19 +126,19 @@ async function promptModelFromOpenCode(
     return promptCustomModel(agentName);
   }
 
-  const selectedModel = await select<string>({
-    message: `Select model for ${agentName}:`,
-    choices: [
+  const selectedModel = await uiSelect<string>(
+    `Choose a model for: ${agentName}`,
+    [
       ...modelOptions.map((model) => ({
         value: model,
-        name: model === currentModel ? `${model} ${pc.dim("(current)")}` : model,
+        name: model === currentModel ? `${model} (current)` : model,
       })),
       {
         value: CUSTOM_MODEL_VALUE,
         name: "Custom model...",
       },
-    ],
-  });
+    ]
+  );
 
   if (selectedModel === CUSTOM_MODEL_VALUE) {
     return promptCustomModel(agentName);
@@ -141,83 +162,73 @@ function hasActiveManagedAgents(target: InstallTarget): boolean {
  * built-in agents (plan, build, explore) store models in opencode config.
  * Built-ins are active by default even without init.
  */
-export async function modelsCommand(): Promise<void> {
-  console.log(pc.bold("\n🎯 OpenCode Path Model Configuration\n"));
+export async function modelsCommand(
+  options: GlobalProjectOptions = {}
+): Promise<void> {
+  printHeader("OpenCode Path Model Configuration", "🎯");
 
-  // Step 1: Detect target
-  const defaultScope = detectDefaultScope();
+  // Step 1: Resolve target
   const projectTarget = resolveTarget("project");
   const globalTarget = resolveTarget("global");
 
-  const hasProjectActiveAgents = hasActiveManagedAgents(projectTarget);
-  const hasGlobalActiveAgents = hasActiveManagedAgents(globalTarget);
-
-  let scope: InstallScope;
-
-  if (!hasProjectActiveAgents && !hasGlobalActiveAgents) {
-    // No active managed agents on either target
-    console.log(
-      pc.yellow(
-        `\n   No active managed agents found. Use ${pc.cyan("opencode-path agents")} to activate agents.\n`
-      )
+  if (
+    !hasActiveManagedAgents(projectTarget) &&
+    !hasActiveManagedAgents(globalTarget)
+  ) {
+    printWarning(
+      "No active managed agents found. Use opencode-path agents to activate agents."
     );
+    console.log();
     return;
   }
 
-  if (!hasProjectActiveAgents) {
-    scope = "global";
-    console.log(`   Target: Global (auto-detected)`);
-  } else {
-    scope = await select<InstallScope>({
-      message: "Which installation do you want to configure?",
-      choices: [
-        {
-          value: "project" as InstallScope,
-          name: `Project .opencode/`,
-          description: projectTarget.agentDir,
-        },
-        {
-          value: "global" as InstallScope,
-          name: `Global ~/.config/opencode/`,
-          description: globalTarget.agentDir,
-        },
-      ],
-      default: defaultScope,
-    });
-  }
+  const scope: InstallScope = await resolveScope(options, {
+    projectViable: hasActiveManagedAgents(projectTarget),
+    globalViable: hasActiveManagedAgents(globalTarget),
+    projectTarget,
+    globalTarget,
+  });
 
   const target = resolveTarget(scope);
-
-  // Show resolved paths
-  console.log(`   Agent dir: ${target.agentDir}`);
-  console.log(`   Config:    ${target.configPath}\n`);
+  printPaths(target);
 
   // Get active managed agents
   const activeAgents = listActiveManagedModelAgents(target);
 
   if (activeAgents.length === 0) {
-    console.log(
-      pc.yellow(
-        `\n   No active managed agents to configure. Use ${pc.cyan("opencode-path agents")} to activate agents.\n`
-      )
+    printWarning(
+      "No active managed agents to configure. Use opencode-path agents to activate agents."
     );
+    console.log();
     return;
   }
 
-  const availableModels = listOpenCodeModels();
+  // Load available models asynchronously with a spinner
+  let availableModels: string[];
+  try {
+    availableModels = await withSpinner(
+      "Loading models from OpenCode...",
+      async (signal) => listOpenCodeModelsAsync({ signal })
+    );
+  } catch (err) {
+    if (err instanceof CancellationError) {
+      throw err;
+    }
+    availableModels = [];
+  }
+
   if (availableModels.length > 0) {
     console.log(
-      pc.dim(`   Loaded ${availableModels.length} models from OpenCode.\n`)
+      `   Loaded ${availableModels.length} models from OpenCode.\n`
     );
   } else {
     console.log(
-      pc.yellow(
-        `   Could not read models from ${pc.cyan("opencode models")}. Falling back to manual input.\n`
-      )
+      `   Could not read models from opencode models. Falling back to manual input.\n`
     );
   }
 
   // Step 2: Agent selection loop
+  const configured: { agent: string; model: string }[] = [];
   let configureAnother = true;
 
   while (configureAnother) {
@@ -225,52 +236,75 @@ export async function modelsCommand(): Promise<void> {
     const currentActiveAgents = listActiveManagedModelAgents(target);
 
     if (currentActiveAgents.length === 0) {
-      console.log(
-        pc.yellow(
-          "\n   No active managed agents remaining to configure.\n"
-        )
-      );
+      printWarning("No active managed agents remaining to configure.");
+      console.log();
       break;
     }
 
-    // Show current models
     const agentChoices = currentActiveAgents.map((agent) => {
       const currentModel = getCurrentModel(agent, target);
       const modelDisplay = currentModel
-        ? pc.dim(` (current: ${currentModel})`)
-        : pc.dim(" (no model set)");
-
-      const kindBadge = agent.kind === "builtin" ? pc.dim("[built-in]") : pc.dim("[custom]");
+        ? ` (current: ${currentModel})`
+        : " (no model set)";
 
       return {
         value: agent.name,
-        name: `${agent.name} ${kindBadge}${modelDisplay}`,
+        name: buildAgentRow(agent) + modelDisplay,
       };
     });
 
-    const agentName = await select<string>({
-      message: "Select an agent to configure:",
-      choices: agentChoices,
-    });
+    const agentName = await uiSelect<string>(
+      "Select an agent to configure:",
+      [
+        {
+          value: ALL_AGENTS_VALUE,
+          name: "Set all active agents to the same model",
+        },
+        ...agentChoices,
+      ]
+    );
 
-    const selectedAgent = currentActiveAgents.find((a) => a.name === agentName);
-    if (!selectedAgent) {
-      // Shouldn't happen, but handle gracefully
-      console.log(pc.red(`\n   Agent ${agentName} is no longer active.\n`));
-      const continueAnyway = await confirm({
-        message: "Configure another agent?",
-        default: true,
-      });
-      if (!continueAnyway) break;
+    if (agentName === ALL_AGENTS_VALUE) {
+      const selectedModel = await promptModelFromOpenCode(
+        "all active agents",
+        availableModels
+      );
+
+      const failed: string[] = [];
+      for (const agent of currentActiveAgents) {
+        try {
+          setCurrentModel(agent, target, selectedModel);
+          configured.push({ agent: agent.name, model: selectedModel });
+        } catch (err: any) {
+          failed.push(agent.name);
+          console.error(
+            `   Error setting model for ${agent.name}: ${err.message}`
+          );
+        }
+      }
+
+      if (failed.length > 0) {
+        console.error(messages.PARTIAL_STATE_WARNING);
+      }
+
+      configureAnother = false;
       continue;
     }
 
-    // Show current model
+    const selectedAgent = currentActiveAgents.find((a) => a.name === agentName);
+    if (!selectedAgent) {
+      printWarning(`Agent ${agentName} is no longer active.`);
+      configureAnother = await uiConfirm("Configure another agent?", {
+        default: true,
+      });
+      continue;
+    }
+
     const currentModel = getCurrentModel(selectedAgent, target);
     if (currentModel) {
-      console.log(pc.dim(`   Current model: ${currentModel}`));
+      console.log(`   Current model: ${currentModel}`);
     } else {
-      console.log(pc.dim(`   No model set`));
+      console.log(`   No model set`);
     }
 
     const trimmedModel = await promptModelFromOpenCode(
@@ -279,26 +313,34 @@ export async function modelsCommand(): Promise<void> {
       currentModel
     );
 
-    // Apply the model
     try {
       setCurrentModel(selectedAgent, target, trimmedModel);
+      configured.push({ agent: selectedAgent.name, model: trimmedModel });
       console.log(
-        pc.green(`\n   ✓ ${selectedAgent.name} model set to: ${pc.bold(trimmedModel)}\n`)
+        `\n   ✓ ${selectedAgent.name} model set to: ${trimmedModel}\n`
       );
     } catch (err: any) {
-      console.log(
-        pc.red(`\n   Error setting model: ${err.message}\n`)
-      );
+      console.error(`\n   Error setting model: ${err.message}\n`);
     }
 
-    // Configure another?
-    configureAnother = await confirm({
-      message: "Configure another agent?",
+    configureAnother = await uiConfirm("Configure another agent?", {
       default: false,
     });
   }
 
-  console.log(
-    pc.yellow("\n⚠️  Restart opencode to apply changes.\n")
-  );
+  if (configured.length > 0) {
+    printComplete("Model configuration");
+    printSummary(
+      configured.map((entry) => ({
+        label: entry.agent,
+        value: entry.model,
+        color: "green" as const,
+      })),
+      { indent: 3 }
+    );
+  } else {
+    printSummary([{ label: "Configured:", value: "none", color: "dim" }]);
+  }
+
+  printRestartWarning();
 }

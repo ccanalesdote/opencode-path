@@ -1,262 +1,857 @@
-import { existsSync, mkdirSync } from "node:fs";
-import pc from "picocolors";
-import { select, checkbox } from "@inquirer/prompts";
-import { resolveTarget, detectDefaultScope, type InstallScope } from "../lib/paths.js";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  resolveTarget,
+  type InstallScope,
+  type InstallTarget,
+} from "../lib/paths.js";
 import { createOrMergeConfig } from "../lib/config.js";
 import {
   listManagedAgentStatuses,
-  installCustomAgent,
-  restoreBuiltinAgent,
+  listActiveManagedAgents,
+  listActiveManagedModelAgents,
+  detectManageableScopes,
+  computeAgentChanges,
+  applyAgentChanges,
   type ManagedAgentStatus,
+  type AgentChanges,
 } from "../lib/agents.js";
+import {
+  PROFILES,
+  getProfile,
+  applyProfileToAgents,
+  profileExistsInContent,
+  type ProfileName,
+  type ProfileApplyResult,
+} from "../lib/profiles.js";
+import { getAgentModel, setAgentModel } from "../lib/frontmatter.js";
+import { getConfigAgentModel, setConfigAgentModel } from "../lib/config.js";
+import {
+  CUSTOM_MODEL_VALUE,
+  buildModelOptions,
+  listOpenCodeModelsAsync,
+} from "../lib/opencode-models.js";
+import { validateAllTemplates } from "../lib/templates.js";
+import {
+  printHeader,
+  printPaths,
+  printWarning,
+  printError,
+  printCancelled,
+  printNoChanges,
+  printComplete,
+  printSummary,
+  printNextStep,
+  printRestartWarning,
+  buildAgentRow,
+  dimText,
+  uiCheckbox,
+  uiSelect,
+  uiInput,
+  uiConfirmWithCancel,
+  resolveScope,
+  withSpinner,
+  withApplyPhaseSigint,
+  applyPhaseCheckpoint,
+  CancellationError,
+  type CommandOptions,
+  type SummaryLine,
+} from "../lib/ui.js";
+import * as messages from "../lib/messages.js";
 
-interface InitResult {
-  created: string[];
-  restored: string[];
-  alreadyActive: string[];
-  conflicts: string[];
-  skipped: string[];
+// ---------------------------------------------------------------------------
+// Patchable agents for profiles (same as standalone profiles command)
+// ---------------------------------------------------------------------------
+
+const PATCHABLE_DEFS = [
+  { name: "developer", variant: "dev" as const },
+  { name: "reviewer", variant: "readonly" as const },
+  { name: "auditor", variant: "readonly" as const },
+];
+
+function getActivePatchableAgents(
+  target: InstallTarget
+): { name: string; variant: "dev" | "readonly" }[] {
+  const activeAgents = listActiveManagedAgents(target);
+  const activeCustomNames = new Set(
+    activeAgents.filter((a) => a.kind === "custom").map((a) => a.name)
+  );
+  return PATCHABLE_DEFS.filter((def) => activeCustomNames.has(def.name));
 }
 
-/**
- * Build a display label for a managed agent suitable for checkbox lists.
- * Includes kind badge and state indicator.
- */
-function agentStatusLabel(agent: ManagedAgentStatus): string {
-  const kindBadge = agent.kind === "builtin" ? pc.dim("[built-in]") : pc.dim("[custom]");
-  const stateLabel =
-    agent.state === "active"
-      ? pc.green("(active)")
-      : agent.state === "missing"
-        ? pc.dim("(not installed)")
-        : agent.state === "hidden"
-          ? pc.yellow("(hidden)")
-          : agent.state === "conflict"
-            ? pc.red("(conflict — manual file)")
-            : "";
-  return `${agent.name} ${kindBadge} ${stateLabel}`;
+// ---------------------------------------------------------------------------
+// Init plan: collected from all steps before any writes
+// ---------------------------------------------------------------------------
+
+interface InitPlan {
+  agentChanges: AgentChanges | null;
+  selectedProfiles: string[];
+  modelAssignments: { agent: ManagedAgentStatus; model: string }[];
+  target: InstallTarget;
 }
 
-/**
- * Check if inquirer checkbox supports disabled items.
- * We use a safe approach: validate after selection.
- */
+interface InitApplyResult {
+  agentResult: {
+    installed: string[];
+    restored: string[];
+    unchanged: string[];
+    conflicts: string[];
+  };
+  profileResult: {
+    applied: string[];
+    skipped: string[];
+    failed: string[];
+  };
+  modelResult: {
+    configured: { agent: string; model: string }[];
+    failed: string[];
+  };
+}
 
-/**
- * Run the `opencode-path init` command.
- *
- * Init is add/restore only:
- * - Can install missing custom agents
- * - Can restore hidden built-ins (plan, build, explore)
- * - Active agents are informational, not removable
- * - Conflict agents are displayed but not modifiable
- */
-export async function initCommand(): Promise<void> {
-  console.log(pc.bold("\n🔧 OpenCode Path Installer\n"));
+// ---------------------------------------------------------------------------
+// Model helpers (adapted from standalone models command)
+// ---------------------------------------------------------------------------
 
-  // Step 1: Target selection
-  const defaultScope = detectDefaultScope();
-  const scope = await select<InstallScope>({
-    message: "Where do you want to install the workflow?",
-    choices: [
-      {
-        value: "project" as InstallScope,
-        name: `Project .opencode/ (current directory)`,
-        description: "Install to ./.opencode/agent/ and ./.opencode/opencode.json",
+function getCurrentModel(
+  agent: ManagedAgentStatus,
+  target: { agentDir: string; configPath: string }
+): string | undefined {
+  if (agent.kind === "builtin") {
+    return getConfigAgentModel(target.configPath, agent.name);
+  }
+  const agentPath = join(target.agentDir, `${agent.name}.md`);
+  return getAgentModel(agentPath);
+}
+
+function setCurrentModel(
+  agent: ManagedAgentStatus,
+  target: { agentDir: string; configPath: string },
+  model: string
+): void {
+  if (agent.kind === "builtin") {
+    setConfigAgentModel(target.configPath, agent.name, model);
+    return;
+  }
+  const agentPath = join(target.agentDir, `${agent.name}.md`);
+  if (!existsSync(agentPath)) {
+    throw new Error(`Agent file not found: ${agentPath}`);
+  }
+  setAgentModel(agentPath, model);
+}
+
+async function promptCustomModel(agentName: string): Promise<string> {
+  let newModel = await uiInput(
+    `Enter model for ${agentName} (Ctrl+C to cancel):`,
+    {
+      validate: (value: string) => {
+        const trimmed = value.trim();
+        if (trimmed.length === 0) {
+          return "Model cannot be empty. Enter a model ID like 'anthropic/claude-sonnet-4-6'.";
+        }
+        return true;
       },
+    }
+  );
+
+  let trimmedModel = newModel.trim();
+
+  if (trimmedModel.length > 0 && !trimmedModel.includes("/")) {
+    const proceed = await uiConfirmWithCancel(
+      "OpenCode models normally use 'provider/model-id' format (e.g., 'anthropic/claude-sonnet-4-6'). Continue anyway?",
+      { default: false }
+    );
+
+    if (!proceed) {
+      newModel = await uiInput(
+        `Enter model for ${agentName} (Ctrl+C to cancel):`,
+        {
+          validate: (value: string) => {
+            const trimmed = value.trim();
+            if (trimmed.length === 0) {
+              return "Model cannot be empty.";
+            }
+            if (!trimmed.includes("/")) {
+              return "Model must use 'provider/model-id' format.";
+            }
+            return true;
+          },
+        }
+      );
+      trimmedModel = newModel.trim();
+    }
+  }
+
+  return trimmedModel;
+}
+
+async function promptModelFromOpenCode(
+  agentName: string,
+  availableModels: string[],
+  currentModel?: string
+): Promise<string> {
+  const modelOptions = buildModelOptions(availableModels, currentModel);
+
+  if (modelOptions.length === 0) {
+    return promptCustomModel(agentName);
+  }
+
+  const selectedModel = await uiSelect<string>(
+    `Choose a model for: ${agentName}`,
+    [
+      ...modelOptions.map((model) => ({
+        value: model,
+        name: model === currentModel ? `${model} (current)` : model,
+      })),
       {
-        value: "global" as InstallScope,
-        name: `Global ~/.config/opencode/`,
-        description: "Install to ~/.config/opencode/agent/ and ~/.config/opencode/opencode.json",
+        value: CUSTOM_MODEL_VALUE,
+        name: "Custom model...",
       },
-    ],
-    default: defaultScope,
+    ]
+  );
+
+  if (selectedModel === CUSTOM_MODEL_VALUE) {
+    return promptCustomModel(agentName);
+  }
+
+  return selectedModel;
+}
+
+// ---------------------------------------------------------------------------
+// Summary builders
+// ---------------------------------------------------------------------------
+
+function buildConsolidatedSummary(
+  plan: InitPlan,
+  statuses: ManagedAgentStatus[]
+): SummaryLine[] {
+  const lines: SummaryLine[] = [];
+
+  // Agent changes
+  if (plan.agentChanges) {
+    const ac = plan.agentChanges;
+    if (ac.toInstall.length > 0) {
+      lines.push({
+        label: "Install:",
+        value: ac.toInstall.join(", "),
+        color: "green",
+      });
+    }
+    if (ac.toRestore.length > 0) {
+      lines.push({
+        label: "Restore:",
+        value: ac.toRestore.join(", "),
+        color: "green",
+      });
+    }
+    const skippedAgents = statuses
+      .filter(
+        (s) =>
+          s.state === "missing" &&
+          !ac.toInstall.includes(s.name) &&
+          s.kind === "custom"
+      )
+      .map((s) => s.name)
+      .concat(
+        statuses
+          .filter(
+            (s) =>
+              s.state === "hidden" &&
+              !ac.toRestore.includes(s.name) &&
+              s.kind === "builtin"
+          )
+          .map((s) => s.name)
+      );
+    if (skippedAgents.length > 0) {
+      lines.push({
+        label: "Skip (agents):",
+        value: skippedAgents.join(", "),
+        color: "yellow",
+      });
+    }
+    if (ac.conflicts.length > 0) {
+      lines.push({
+        label: "Conflicts:",
+        value: ac.conflicts.join(", "),
+        color: "red",
+      });
+    }
+  } else {
+    lines.push({
+      label: "Agents:",
+      value: "skipped",
+      color: "yellow",
+    });
+  }
+
+  // Profile changes
+  if (plan.selectedProfiles.length > 0) {
+    const profileLabels = plan.selectedProfiles.map(
+      (name) => getProfile(name)?.label ?? name
+    );
+    lines.push({
+      label: "Profiles:",
+      value: profileLabels.join(", "),
+      color: "green",
+    });
+  } else {
+    lines.push({
+      label: "Profiles:",
+      value: "skipped",
+      color: "yellow",
+    });
+  }
+
+  // Model assignments
+  if (plan.modelAssignments.length > 0) {
+    lines.push({
+      label: "Models:",
+      value: plan.modelAssignments
+        .map((m) => `${m.agent.name} → ${m.model}`)
+        .join(", "),
+      color: "green",
+    });
+  } else {
+    lines.push({
+      label: "Models:",
+      value: "skipped",
+      color: "yellow",
+    });
+  }
+
+  return lines;
+}
+
+function hasPlannedChanges(plan: InitPlan): boolean {
+  const hasAgentChanges =
+    plan.agentChanges !== null &&
+    (plan.agentChanges.toInstall.length > 0 ||
+      plan.agentChanges.toRestore.length > 0);
+
+  return (
+    hasAgentChanges ||
+    plan.selectedProfiles.length > 0 ||
+    plan.modelAssignments.length > 0
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Apply logic
+// ---------------------------------------------------------------------------
+
+async function applyPlan(
+  plan: InitPlan,
+  statuses: ManagedAgentStatus[]
+): Promise<InitApplyResult> {
+  const result: InitApplyResult = {
+    agentResult: { installed: [], restored: [], unchanged: [], conflicts: [] },
+    profileResult: { applied: [], skipped: [], failed: [] },
+    modelResult: { configured: [], failed: [] },
+  };
+
+  // 1. Apply agent changes
+  if (plan.agentChanges) {
+    await applyPhaseCheckpoint();
+
+    // Ensure agent directory exists
+    if (!existsSync(plan.target.agentDir)) {
+      mkdirSync(plan.target.agentDir, { recursive: true });
+    }
+
+    await applyPhaseCheckpoint();
+
+    const agentResult = applyAgentChanges(plan.agentChanges, plan.target);
+    result.agentResult = {
+      installed: agentResult.installed,
+      restored: agentResult.restored,
+      unchanged: agentResult.unchanged,
+      conflicts: agentResult.conflicts,
+    };
+  }
+
+  // 2. Create or merge config
+  await applyPhaseCheckpoint();
+  createOrMergeConfig(plan.target.configPath);
+
+  // 3. Apply profile changes
+  if (plan.selectedProfiles.length > 0) {
+    await applyPhaseCheckpoint();
+
+    const patchableAgents = getActivePatchableAgents(plan.target);
+    if (patchableAgents.length > 0) {
+      for (const profileName of plan.selectedProfiles) {
+        await applyPhaseCheckpoint();
+
+        const profile = getProfile(profileName);
+        if (!profile) continue;
+
+        const applyResult = applyProfileToAgents(
+          plan.target.agentDir,
+          profile,
+          patchableAgents
+        );
+
+        const inserted = applyResult.files.filter(
+          (f) => f.status === "inserted"
+        );
+        const errors = applyResult.files.filter(
+          (f) => f.status === "marker_not_found"
+        );
+
+        if (inserted.length > 0) {
+          result.profileResult.applied.push(profile.label);
+        }
+        if (errors.length > 0) {
+          result.profileResult.failed.push(profile.label);
+        }
+        if (
+          inserted.length === 0 &&
+          errors.length === 0
+        ) {
+          result.profileResult.skipped.push(profile.label);
+        }
+      }
+    }
+  }
+
+  // 4. Apply model assignments
+  await applyPhaseCheckpoint();
+  for (const assignment of plan.modelAssignments) {
+    await applyPhaseCheckpoint();
+
+    try {
+      setCurrentModel(assignment.agent, plan.target, assignment.model);
+      result.modelResult.configured.push({
+        agent: assignment.agent.name,
+        model: assignment.model,
+      });
+    } catch {
+      result.modelResult.failed.push(assignment.agent.name);
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Main init command
+// ---------------------------------------------------------------------------
+
+export async function initCommand(
+  options: CommandOptions = {}
+): Promise<void> {
+  printHeader("OpenCode Path Installer", "🔧");
+
+  // Step 0: Validate template frontmatter (AC-31)
+  const templateErrors = validateAllTemplates();
+  if (templateErrors.length > 0) {
+    printError(
+      `   Malformed template frontmatter detected:`
+    );
+    for (const err of templateErrors) {
+      console.error(`     • ${err}`);
+    }
+    console.error(
+      `\n   Fix the template files and re-run init.\n`
+    );
+    process.exit(1);
+  }
+
+  // Step 1: Resolve scope
+  const projectTarget = resolveTarget("project");
+  const globalTarget = resolveTarget("global");
+  const { projectManageable, globalManageable } = detectManageableScopes(
+    projectTarget,
+    globalTarget
+  );
+
+  const scope: InstallScope = await resolveScope(options, {
+    projectViable: projectManageable,
+    globalViable: globalManageable,
+    projectTarget,
+    globalTarget,
   });
 
   const target = resolveTarget(scope);
+  printPaths(target);
 
-  // Step 2: Get agent statuses
+  // Step 2: Scan state and display conflict warnings (AC-02)
   const statuses = listManagedAgentStatuses(target);
+  const conflictAgents = statuses.filter((s) => s.state === "conflict");
 
-  // Build checkbox choices
-  // - Active agents: shown checked, but we'll validate they can't be removed
-  // - Missing custom agents: shown unchecked (can be selected to install)
-  // - Hidden built-ins: shown unchecked (can be selected to restore)
-  // - Conflict agents: shown with warning, checked=false
-  const choices = statuses.map((agent) => {
-    const isDefaultChecked =
-      agent.state === "active";
+  if (conflictAgents.length > 0) {
+    printWarning(
+      `Conflicting agents (manual files without managed marker): ${conflictAgents
+        .map((a) => a.name)
+        .join(", ")}`
+    );
+    console.log(
+      "     They cannot be managed here. Resolve manually or add the marker.\n"
+    );
+  }
+
+  // Build the plan
+  const plan: InitPlan = {
+    agentChanges: null,
+    selectedProfiles: [],
+    modelAssignments: [],
+    target,
+  };
+
+  // Step 3: Agent selection (AC-03, AC-06, AC-07)
+  const agentChoices = statuses.map((agent) => {
+    const isDefaultChecked = agent.state === "active";
 
     return {
       value: agent.name,
-      name: agentStatusLabel(agent),
+      name: buildAgentRow(agent, { showGlyph: true }),
       checked: isDefaultChecked,
     };
   });
 
-  console.log(pc.bold("\n📋 Select agents to install/restore:"));
-  console.log(pc.dim("   Already-active agents and conflicts cannot be changed here."));
-  console.log(pc.dim("   Use 'opencode-path agents' for full management.\n"));
+  const SKIP_AGENTS_VALUE = "__skip_agents__";
 
-  if (statuses.some((a) => a.state === "conflict")) {
-    console.log(
-      pc.yellow(
-        "   ⚠ Conflicting agents (manual files without managed marker) are shown but cannot be modified."
-      )
+  const agentSelection = await uiSelect<string>(
+    "Agent installation:",
+    [
+      {
+        value: "__select__",
+        name: "Select agents to install/restore...",
+        description: `${statuses.filter((s) => s.state === "active").length} active, ${statuses.filter((s) => s.state === "missing").length} missing, ${statuses.filter((s) => s.state === "hidden").length} hidden`,
+      },
+      {
+        value: SKIP_AGENTS_VALUE,
+        name: dimText("Skip for now"),
+      },
+    ]
+  );
+
+  if (agentSelection !== SKIP_AGENTS_VALUE) {
+    // Show the checkbox for agent selection
+    const selectedNames = await uiCheckbox<string>(
+      "Select agents to install/restore (space to toggle, enter to confirm):",
+      agentChoices,
+      { required: false }
     );
-    console.log(
-      pc.dim(
-        "     To resolve: either delete the manual file and re-run, or add the marker manually.\n"
-      )
-    );
+
+    // Compute agent changes
+    const selectedSet = new Set(selectedNames);
+    // Active agents must remain selected (init is add/restore only)
+    const activeAgents = statuses
+      .filter((a) => a.state === "active")
+      .map((a) => a.name);
+    for (const name of activeAgents) {
+      selectedSet.add(name);
+    }
+    // Conflict agents cannot be selected
+    for (const agent of conflictAgents) {
+      selectedSet.delete(agent.name);
+    }
+
+    plan.agentChanges = computeAgentChanges(statuses, selectedSet);
   }
 
-  const selectedNames = await checkbox<string>({
-    message: "Select agents to install/restore (space to toggle, enter to confirm):",
-    choices,
-    required: false,
-  });
-
-  // Validate: active agents must not be removed, conflict agents must not be selected.
-  // Since @inquirer/prompts checkbox does not support disabled entries,
-  // we enforce this by correcting the selection and printing feedback.
-  const activeAgents = statuses.filter((a) => a.state === "active").map((a) => a.name);
-  const conflictAgents = statuses.filter((a) => a.state === "conflict").map((a) => a.name);
-
-  const finalSelection = new Set(selectedNames);
-  let correctedActive = false;
-  let correctedConflict = false;
-
-  // Ensure all active agents remain in selection (they cannot be removed via init)
-  for (const name of activeAgents) {
-    if (!finalSelection.has(name)) {
-      finalSelection.add(name);
-      correctedActive = true;
+  // Step 4: Profile selection (AC-04, AC-06, AC-07)
+  // Determine which patchable agents will be active after agent step
+  const willBeActive = new Set<string>();
+  if (plan.agentChanges) {
+    for (const name of plan.agentChanges.toInstall) willBeActive.add(name);
+    for (const name of plan.agentChanges.toRestore) willBeActive.add(name);
+    for (const name of plan.agentChanges.unchanged) willBeActive.add(name);
+  } else {
+    // If agents step was skipped, use current active state
+    for (const s of statuses.filter((a) => a.state === "active")) {
+      willBeActive.add(s.name);
     }
   }
 
-  // Ensure conflict agents are NOT in the selection (they cannot be managed)
-  for (const name of conflictAgents) {
-    if (finalSelection.has(name)) {
-      finalSelection.delete(name);
-      correctedConflict = true;
-    }
-  }
+  const willBePatchable = PATCHABLE_DEFS.filter((def) =>
+    willBeActive.has(def.name)
+  );
 
-  if (correctedActive) {
-    console.log(
-      pc.dim("\n   Note: Active agents cannot be removed via init. They have been kept selected.")
+  const SKIP_PROFILES_VALUE = "__skip_profiles__";
+
+  if (willBePatchable.length > 0) {
+    const profileSelection = await uiSelect<string>(
+      "Stack profiles:",
+      [
+        {
+          value: "__select__",
+          name: "Select stack profiles to apply...",
+          description: `${willBePatchable.map((a) => a.name).join(", ")} will receive profiles`,
+        },
+        {
+          value: SKIP_PROFILES_VALUE,
+          name: dimText("Skip for now"),
+        },
+      ]
     );
-  }
-  if (correctedConflict) {
-    console.log(
-      pc.yellow("\n   Note: Conflict agents cannot be modified. They have been deselected.")
-    );
-  }
 
-  // Step 3: Create agent directory
-  if (!existsSync(target.agentDir)) {
-    mkdirSync(target.agentDir, { recursive: true });
-  }
+    if (profileSelection !== SKIP_PROFILES_VALUE) {
+      const selectedProfileNames = await uiCheckbox<ProfileName>(
+        "Select stack profiles to apply (space to toggle, enter to confirm):",
+        [
+          ...PROFILES.map((p) => ({
+            value: p.name as ProfileName,
+            name: p.label,
+          })),
+          {
+            value: "__all__" as ProfileName,
+            name: "All stacks (apply every profile above)",
+          },
+        ],
+        { required: false }
+      );
 
-  // Step 4: Apply changes
-  const result: InitResult = {
-    created: [],
-    restored: [],
-    alreadyActive: [],
-    conflicts: [],
-    skipped: [],
-  };
+      if (selectedProfileNames.length > 0) {
+        const allSelected = selectedProfileNames.includes("__all__")
+          ? PROFILES.map((p) => p.name)
+          : selectedProfileNames;
 
-  for (const agent of statuses) {
-    const isSelected = finalSelection.has(agent.name);
-
-    if (agent.state === "conflict") {
-      result.conflicts.push(agent.name);
-      continue;
-    }
-
-    if (agent.kind === "custom") {
-      if (agent.state === "active") {
-        result.alreadyActive.push(agent.name);
-        continue;
-      }
-
-      if (agent.state === "missing" && isSelected) {
-        const installResult = installCustomAgent(agent.name as any, target);
-        if (installResult === "created") {
-          result.created.push(agent.name);
-        } else if (installResult === "conflict") {
-          result.conflicts.push(agent.name);
-        } else {
-          result.alreadyActive.push(agent.name);
+        // Filter out profiles that are already applied to ALL agents that will
+        // be patchable after this init run (not just currently active ones).
+        // This handles the mixed case: developer already profiled + reviewer
+        // newly installed in the same run.
+        const newProfiles: string[] = [];
+        for (const profileName of allSelected) {
+          const alreadyApplied = willBePatchable.every((a) => {
+            const agentPath = join(target.agentDir, `${a.name}.md`);
+            if (!existsSync(agentPath)) return false;
+            try {
+              const content = readFileSync(agentPath, "utf-8");
+              return profileExistsInContent(content, profileName);
+            } catch {
+              return false;
+            }
+          });
+          if (!alreadyApplied) {
+            newProfiles.push(profileName);
+          }
         }
-        continue;
-      }
-
-      if (agent.state === "missing" && !isSelected) {
-        result.skipped.push(agent.name);
-        continue;
-      }
-    }
-
-    if (agent.kind === "builtin") {
-      if (agent.state === "active") {
-        result.alreadyActive.push(agent.name);
-        continue;
-      }
-
-      if (agent.state === "hidden" && isSelected) {
-        restoreBuiltinAgent(agent.name, target);
-        result.restored.push(agent.name);
-        continue;
-      }
-
-      if (agent.state === "hidden" && !isSelected) {
-        result.skipped.push(agent.name);
-        continue;
+        plan.selectedProfiles = newProfiles;
       }
     }
   }
 
-  // Step 5: Create or merge config
-  createOrMergeConfig(target.configPath);
+  // Step 5: Model configuration (AC-05, AC-06, AC-07)
+  // Determine which agents are active for model config
+  const activeModelAgents = statuses.filter(
+    (s) =>
+      s.state === "active" ||
+      (plan.agentChanges &&
+        (plan.agentChanges.toInstall.includes(s.name) ||
+          plan.agentChanges.toRestore.includes(s.name)))
+  );
 
-  // Step 6: Print results
-  console.log(pc.bold("\n✅ Installation complete!\n"));
+  const SKIP_MODELS_VALUE = "__skip_models__";
+  const SKIP_ONE_MODEL_VALUE = "__skip_one_model__";
 
-  if (result.created.length > 0) {
-    console.log(pc.green(`   Created:      ${result.created.join(", ")}`));
-  }
-  if (result.restored.length > 0) {
-    console.log(pc.green(`   Restored:     ${result.restored.join(", ")}`));
-  }
-  if (result.alreadyActive.length > 0) {
-    console.log(pc.dim(`   Already active: ${result.alreadyActive.join(", ")}`));
-  }
-  if (result.skipped.length > 0) {
-    console.log(pc.dim(`   Skipped:      ${result.skipped.join(", ")}`));
-  }
-  if (result.conflicts.length > 0) {
-    console.log(pc.red(`   Conflicts:    ${result.conflicts.join(", ")}`));
+  if (activeModelAgents.length > 0) {
+    // Load available models with spinner
+    let availableModels: string[] = [];
+    try {
+      availableModels = await withSpinner(
+        "Loading models from OpenCode...",
+        async (signal) => listOpenCodeModelsAsync({ signal })
+      );
+    } catch (err) {
+      if (err instanceof CancellationError) throw err;
+      availableModels = [];
+    }
+
+    if (availableModels.length > 0) {
+      console.log(
+        `   Loaded ${availableModels.length} models from OpenCode.\n`
+      );
+    } else {
+      console.log(
+        `   Could not read models from opencode. Falling back to manual input.\n`
+      );
+    }
+
+    const modelStepChoice = await uiSelect<string>(
+      "Model configuration:",
+      [
+        {
+          value: "__configure__",
+          name: "Configure models for active agents...",
+          description: `${activeModelAgents.length} agent(s) to configure`,
+        },
+        {
+          value: SKIP_MODELS_VALUE,
+          name: dimText("Skip for now"),
+        },
+      ]
+    );
+
+    if (modelStepChoice !== SKIP_MODELS_VALUE) {
+      // Iterate active agents, prompting once per agent
+      for (const agent of activeModelAgents) {
+        const currentModel = getCurrentModel(agent, target);
+        const modelDisplay = currentModel
+          ? ` (current: ${currentModel})`
+          : " (no model set)";
+
+        const modelChoice = await uiSelect<string>(
+          `Choose a model for: ${agent.name}`,
+          [
+            ...buildModelOptions(availableModels, currentModel).map(
+              (model) => ({
+                value: model,
+                name: model === currentModel ? `${model} (current)` : model,
+              })
+            ),
+            {
+              value: CUSTOM_MODEL_VALUE,
+              name: "Custom model...",
+            },
+            {
+              value: SKIP_ONE_MODEL_VALUE,
+              name: dimText("Skip for now"),
+            },
+          ]
+        );
+
+        if (modelChoice !== SKIP_ONE_MODEL_VALUE) {
+          let selectedModel: string;
+          if (modelChoice === CUSTOM_MODEL_VALUE) {
+            selectedModel = await promptCustomModel(agent.name);
+          } else {
+            selectedModel = modelChoice;
+          }
+          // Only add if the model actually differs from the current one
+          const currentModel = getCurrentModel(agent, target);
+          if (selectedModel !== currentModel) {
+            plan.modelAssignments.push({ agent, model: selectedModel });
+          }
+        }
+      }
+    }
+  } else {
     console.log(
-      pc.yellow(
-        `     These agents have manual files without the managed marker. Resolve manually.`
-      )
+      "   No active managed agents to configure models for.\n"
     );
   }
 
-  console.log(`\n   Config: ${target.configPath}`);
-  console.log(`   Agents: ${target.agentDir}`);
+  // Step 6: Consolidated summary (AC-08)
+  console.log("\n   Planned changes:");
+  printSummary(buildConsolidatedSummary(plan, statuses));
 
-  console.log(
-    pc.bold(
-      `\n📌 Next step: Configure models with ${pc.cyan("opencode-path models")}`
-    )
-  );
-  console.log(
-    pc.yellow(
-      "⚠️  Restart opencode to apply changes.\n"
-    )
-  );
+  // Check for no changes (AC-09)
+  if (!hasPlannedChanges(plan)) {
+    printNoChanges();
+    return;
+  }
+
+  // Step 7: Final confirm/apply (AC-08, AC-13, AC-39)
+  if (options.dryRun) {
+    console.log(`\n   ${messages.DRY_RUN_LABEL} No files were modified.\n`);
+    return;
+  }
+
+  if (!options.yes) {
+    const proceed = await uiConfirmWithCancel(messages.APPLY_CHANGES, {
+      default: true,
+    });
+
+    if (!proceed) {
+      printCancelled();
+      return;
+    }
+  }
+
+  // Apply the plan (guarded by apply-phase SIGINT handler per AC-13)
+  let applyResult: InitApplyResult;
+  try {
+    applyResult = await withApplyPhaseSigint(() => applyPlan(plan, statuses));
+  } catch (err) {
+    if (err instanceof CancellationError) {
+      // SIGINT received during writes — changes may be partially applied.
+      printWarning(messages.PARTIAL_STATE_WARNING);
+      process.exit(1);
+    }
+    printError(`\n   Error during apply: ${err instanceof Error ? err.message : String(err)}`);
+    printWarning(messages.PARTIAL_STATE_WARNING);
+    process.exit(1);
+  }
+
+  // Step 8: Print results
+  printComplete("Installation");
+
+  const resultLines: SummaryLine[] = [];
+
+  if (applyResult.agentResult.installed.length > 0) {
+    resultLines.push({
+      label: "Installed:",
+      value: applyResult.agentResult.installed.join(", "),
+      color: "green",
+    });
+  }
+  if (applyResult.agentResult.restored.length > 0) {
+    resultLines.push({
+      label: "Restored:",
+      value: applyResult.agentResult.restored.join(", "),
+      color: "green",
+    });
+  }
+  if (applyResult.agentResult.conflicts.length > 0) {
+    resultLines.push({
+      label: "Conflicts:",
+      value: applyResult.agentResult.conflicts.join(", "),
+      color: "red",
+    });
+  }
+  if (applyResult.profileResult.applied.length > 0) {
+    resultLines.push({
+      label: "Profiles:",
+      value: applyResult.profileResult.applied.join(", "),
+      color: "green",
+    });
+  }
+  if (applyResult.profileResult.failed.length > 0) {
+    resultLines.push({
+      label: "Profile errors:",
+      value: applyResult.profileResult.failed.join(", "),
+      color: "red",
+    });
+  }
+  if (applyResult.modelResult.configured.length > 0) {
+    resultLines.push({
+      label: "Models:",
+      value: applyResult.modelResult.configured
+        .map((m) => `${m.agent} → ${m.model}`)
+        .join(", "),
+      color: "green",
+    });
+  }
+  if (applyResult.modelResult.failed.length > 0) {
+    resultLines.push({
+      label: "Model errors:",
+      value: applyResult.modelResult.failed.join(", "),
+      color: "red",
+    });
+  }
+
+  if (resultLines.length > 0) {
+    printSummary(resultLines);
+  }
+
+  if (applyResult.agentResult.conflicts.length > 0) {
+    console.log(`\n   ${messages.CONFLICT_RESOLVE_HINT}`);
+  }
+
+  if (applyResult.profileResult.failed.length > 0) {
+    console.log(
+      "     Profile marker may have been removed from the agent file."
+    );
+  }
+
+  if (applyResult.modelResult.failed.length > 0) {
+    printWarning(messages.PARTIAL_STATE_WARNING);
+  }
+
+  printPaths(target);
+  printNextStep(messages.NEXT_STEP_MODELS);
+  printRestartWarning();
 }
+
+

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
 import type { PackAgentName } from "./paths.js";
 import { PACK_AGENTS } from "./paths.js";
+import { parseFrontmatter } from "./frontmatter.js";
 
 /**
  * Resolve the templates directory path.
@@ -67,4 +68,27 @@ export function listTemplates(): PackAgentName[] {
   }
 
   return found;
+}
+
+/**
+ * Validate YAML frontmatter for all template files.
+ * Returns an array of error messages (empty if all templates are valid).
+ * Used by `init` to abort before prompts when templates are malformed (AC-31).
+ */
+export function validateAllTemplates(): string[] {
+  const templates = listTemplates();
+  const errors: string[] = [];
+
+  for (const name of templates) {
+    const templatePath = getTemplatePath(name);
+    try {
+      const content = readFileSync(templatePath, "utf-8");
+      parseFrontmatter(content);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push(`${name}.md: ${message}`);
+    }
+  }
+
+  return errors;
 }
