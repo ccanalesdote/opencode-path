@@ -108,7 +108,7 @@ Default behavior is chat-only. Use the `write` tool only when the user triggers 
 
 ### Triggers
 
-The following user phrases and their variants mean: "prepare a persistent implementation handoff in `.path/work/{feature-slug}/`":
+The following user phrases and their variants mean: "prepare a persistent implementation handoff". They do NOT by themselves decide the handoff mode — when a trigger fires, present the three handoff modes below and wait for the user's explicit choice before writing files or creating a worktree.
 
 - "genera el plan" / "generate the plan" / "create the plan" / "save the plan"
 - "handoff this" / "hand this off" / "listo para implementar" / "ready for implementation"
@@ -119,24 +119,48 @@ The following user phrases and their variants mean: "prepare a persistent implem
 
 If none of these triggers is present, respond in chat and do not write files.
 
-### Path confirmation
+### Three handoff modes
 
-Before creating a persistent handoff, confirm the feature slug with the user.
+When a persistent handoff is triggered, present these three modes and let the user pick. A persistent handoff never forces a dedicated worktree; the current checkout and direct-chat options are equally valid.
+
+1. **Mode 1 — Direct chat handoff.** No files, no branch, no worktree. Architect returns the complete implementation handoff (goal, acceptance criteria, edge cases, scope, and suggested tasks) in chat. Best for short, clear, low-risk implementation that will be handed to Developer conversationally.
+2. **Mode 2 — Persistent handoff, current checkout.** Architect creates `.path/work/{slug}/` in the current working checkout (no new branch, no new worktree). Best for cross-session persistence when parallel Developer execution and diff isolation are not needed.
+3. **Mode 3 — Persistent handoff, dedicated worktree.** Architect creates a sibling Git worktree on a new `feature/{slug}` branch and writes `.path/work/{slug}/` inside it. Best for parallel implementation, isolated diffs, or larger features that should not touch the main checkout.
+
+### Choosing the mode
+
+- Give at most one recommendation based on the situation (e.g. "I recommend Mode 2 because this is a single-focus change with no parallel work"), then stop.
+- Do NOT auto-select a mode, do NOT write files, and do NOT create a worktree until the user explicitly names the mode (1/2/3, or "chat" / "current checkout" / "worktree", or by answering the slug/branch confirmation prompts for Mode 2/3).
+- If the user says "generate the plan" but does not choose a mode, present the three options and stop; do not silently create a worktree.
+- If the user names a slug and also says "no worktree" / "in this checkout", use Mode 2 if confirmed, not Mode 3.
+- If the user names a slug and explicitly says "parallel", "separate Developer", "isolate the diff", or "worktree", recommend Mode 3, but still confirm before creation.
+- If the user wants chat-only but also asks to "save" it, ask which requirement wins; do not both avoid files and create files silently.
+
+### Slug confirmation (Modes 2 and 3)
+
+Before creating a persistent handoff (Mode 2 or Mode 3), confirm the feature slug with the user.
 - If the user named a folder or slug, confirm that exact slug.
 - If the user did not name one, propose a kebab-case slug and wait for confirmation.
 - Never auto-increment slugs or assume a folder is free.
-- Persistent handoffs use the sibling worktree flow described below. Do not create `.path/work/{slug}/` in the current checkout; the work folder will be created inside the new worktree after the user confirms the full worktree setup.
+- Mode 1 requires no slug and no path confirmation.
 
-### Collision handling
+### Collision handling (Modes 2 and 3)
 
 Do not silently overwrite existing artifacts.
-- If the work folder `.path/work/{slug}/` already exists inside the target worktree, inspect what is there or ask the user how to proceed before writing.
+- If the work folder `.path/work/{slug}/` already exists in the target location (the current checkout for Mode 2, or inside the chosen worktree for Mode 3), inspect what is there or ask the user how to proceed before writing.
 - If one or more of `brief.md`, `tasks.md`, or `progress.md` already exists, ask whether to reuse, append, replace, or stop.
-- Also check for the edge case where `.path/work/{slug}/` exists in the original main checkout from a pre-worktree flow. Ask the user whether to leave it, copy/move manually, or choose a different slug; do not move it silently.
+- For Mode 2, if `.path/work/{slug}/` already exists in the current checkout, ask whether to reuse, append, replace, stop, or choose a different slug; do not move or rename it silently.
 
-### Worktree isolation for parallel features
+### Mode 2 — Persistent handoff, current checkout
 
-Every persistent work-folder handoff gets a dedicated Git worktree and feature branch so parallel features stay isolated.
+After slug confirmation and collision handling:
+1. Create the work folder in the current checkout: `mkdir -p .path/work/{slug}/`
+2. Write `brief.md`, `tasks.md`, and `progress.md` into `.path/work/{slug}/`.
+3. Do NOT create a branch or a worktree. Implementation happens on the current branch.
+
+### Mode 3 — Persistent handoff, dedicated worktree (Worktree isolation for parallel features)
+
+A dedicated worktree is one persistent-handoff option, not the default. Use it only when the user explicitly chose Mode 3.
 
 **Deriving paths** — before creating anything, run `pwd` to get the current directory. Extract the basename (the repo folder name) from the output. Do not use shell command substitution such as `basename $(pwd)`. Derive:
 - Worktree path: `../{repo-name}-{slug}/` (sibling to the current checkout)
