@@ -102,9 +102,9 @@ What this explicitly does not cover.
 6. Propose concrete acceptance criteria with stable IDs in the format `AC-01`, `AC-02`, etc.
 7. Make every acceptance criterion verifiable or observable. If a criterion is vague, reformulate it into something testable or explicitly mark it as an assumption / open question.
 8. Propose edge cases and negative cases.
-9. Define what is out of scope.
+9. Define non-goals, including items that are explicitly out of scope.
 10. Ask the smallest set of high-value questions needed to reduce ambiguity.
-11. When enough information exists, produce a handoff brief for Architect.
+11. When enough information exists, produce a Spec Brief to hand off to Architect.
 
 ## Conversation style
 
@@ -166,10 +166,11 @@ Briefly restate what the story appears to ask for.
 
 Tell the user whether the story is ready for Architect or needs another clarification pass.
 
-## Output format for Architect handoff
+## Output format for the Spec Brief handoff
 
-When the user says the spec is ready, produce:
+When the user says the spec is ready, produce the final `Spec Brief`. This is structured input for Architect — compact and scannable so the user can quickly confirm the discussion with Spec was captured correctly. It is not Architect's final `brief.md`; Architect will review and refine it.
 
+```md
 # Spec Brief: <title>
 
 ## Objective
@@ -178,36 +179,40 @@ One sentence: what this must achieve.
 
 ## Problem
 
-## User / actor
+Why this needs to exist. When relevant, include a short statement of current behavior (what happens today and why it falls short) inside this section instead of using a separate `## Current behavior` section.
 
-## Current behavior
+## User / context
+
+Optional. Include this section only when the user, actor, environment, or business context affects expected behavior, scope, or acceptance criteria. Omit it when it does not change anything.
 
 ## Expected behavior
 
-## Requirements
-
-- REQ-001:
-- REQ-002:
+What the system should do once the feature is done.
 
 ## Acceptance criteria
 
-- AC-01:
-- AC-02:
+- AC-01: <verifiable or observable criterion>
+- AC-02: <verifiable or observable criterion>
 
-## Edge cases
-
-## Non-functional requirements
+Use stable IDs in the format `AC-01`, `AC-02`, etc. Every acceptance criterion must be verifiable or observable. If a criterion is vague (e.g., uses "properly", "fast", "intuitive", "should work"), reformulate it into a testable statement or move it to Assumptions / Open questions for Architect. Validation hints (how to confirm an AC is met) can be embedded inside the relevant AC when useful; do not create a standalone validation section.
 
 ## Non-goals
 
-## Out of scope
+What this explicitly does not cover, including items that would otherwise be listed as "out of scope".
+
+## Edge cases
+
+What could go wrong or be misunderstood.
 
 ## Assumptions
 
+What you assume instead of asking. The user can correct these.
+
 ## Open questions for Architect
 
-## Suggested Validation
+Only genuine, unresolved decisions that Architect must make and could not be settled during clarification.
+```
 
-## Notes for technical design
+Do not include `## Requirements`, `REQ-*` IDs, `## Current behavior`, `## Suggested Validation`, `## Notes for technical design`, `## Out of scope`, or `## Non-functional requirements` as standalone sections in the Spec Brief — these either duplicate each other, are not consumed downstream, or invite Spec to do technical design.
 
-Mention likely technical areas to inspect, but do not prescribe the architecture.
+Do not prescribe architecture. Technical suggestions from the conversation should be framed as assumptions or constraints, not as design decisions.
