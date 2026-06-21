@@ -347,6 +347,35 @@
 
 ---
 
+### 2026-06-20 — Developer — CI evidence (post-push)
+
+#### Current Task
+- T-010 / AC-08 (CI evidence)
+
+#### Current Status
+- GitHub Actions CI run confirmed observable and passing.
+
+#### What Changed
+- Pushed 7 commits to `feature/stabilize-opencode-path-Kimi`.
+- CI triggered automatically on push.
+
+#### Validation Run
+- GitHub Actions [run 27892519843](https://github.com/ccanalesdote/opencode-path/actions/runs/27892519843):
+  - Test: success
+  - Typecheck: success
+  - Build: success
+  - Package smoke test: success
+
+#### Decisions Made
+- All 4 CI jobs pass on hosted runner; AC-08 is now fully evidenced.
+- Auditor CI note in `tasks.md` closed (resolved).
+
+#### Notes for Next Session
+- All 13 ACs have both local and hosted validation evidence.
+- Ready to create PR for review.
+
+---
+
 ### 2026-06-20 — Auditor — Quality audit
 
 #### Current Task

@@ -40,7 +40,7 @@
 ## Auditor notes
 | Date | Related task | Severity | Status | Finding / resolution note | Suggested follow-up |
 |---|---|---|---|---|---|
-| 2026-06-20 | T-005, T-010 / AC-08 | minor | open | Quality audit verified `.github/workflows/ci.yml` statically and local commands pass, but no observable GitHub Actions run output is present yet; CI execution on push/PR remains unproven. | After pushing/opening PR, attach or record CI run result. |
+| 2026-06-20 | T-005, T-010 / AC-08 | minor | resolved | Quality audit noted CI was verified statically only. Hosted GitHub Actions run now observable: [run 27892519843](https://github.com/ccanalesdote/opencode-path/actions/runs/27892519843) — all 4 jobs (Test, Typecheck, Build, Smoke) passed. | N/A — resolved. |
 | 2026-06-20 | T-001, T-002, T-007, T-008 | minor | resolved | Tests added: 7 template invariant tests + 2 CLI error message tests. 265 tests pass. | N/A — resolved by T-011. |
 | 2026-06-20 | T-011 | nit | resolved | Follow-up audit confirmed the product regression tests pass and cover the prior gap, but `progress.md` said "8 new focused regression tests" / "6 template invariant tests" while observable test delta is 9 total tests: 7 template tests + 2 UI tests. | Corrected in progress.md: "9 new focused regression tests" and "7 template invariant tests". |
 | 2026-06-20 | T-011 / AC-08 | minor | partially resolved | Targeted re-audit verified the T-011 count wording is corrected and CI hosted execution is still accurately marked pending; no hosted CI run evidence was present in the inspected files. | Once push/PR CI runs, record URL/status/jobs to close AC-08 validation evidence. |
