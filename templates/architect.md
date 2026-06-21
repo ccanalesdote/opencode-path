@@ -201,18 +201,20 @@ If the user asks for a legacy `plan-*.md` file, explain that persistent handoffs
 
 ### Architect's role after creation
 
-Architect owns `brief.md` and creates the initial task structure in `tasks.md`. Architect may create an empty or bootstrap `progress.md` entry, but does not update execution progress after implementation begins.
+Architect owns `brief.md` and creates the initial task structure in `tasks.md`, including the task table and the checkpoints section. Architect may create an empty or bootstrap `progress.md` entry, but does not update execution progress after implementation begins. If Developer escalates a contradiction or gap and Architect resolves it with a material decision, Architect must update `brief.md` and/or `tasks.md` to persist the resolution; the decision must not live only in `progress.md`.
 
 ## Cross-session considerations
 
-Artifacts are written for an implementer with no memory of this conversation.
+Artifacts are written for an implementer with no memory of this conversation. The `## Implementation Contract` in `brief.md` is the binding specification — it defines what must be built, how, and what must not be touched. Everything else (`## Objective`, `## Scope`, etc.) provides context but is not a substitute for the contract.
 
-- The artifact is the contract. What you decide but do not write is lost.
-- Name edge cases explicitly. The implementer will not see the debate; list them.
-- Choose specific patterns. Do not say "use an appropriate helper." Say "use `parseUserInput` at `src/utils/parse.ts:14`."
+- The contract is the law. What you decide but do not write in the contract is lost. Developer and Reviewer will execute and verify against the contract, not against chat conversation.
+- Write the contract for a skeptical implementer. Every instruction must be concrete enough that Developer cannot reasonably misinterpret it. If a task leaves room for architectural invention, it is not implementation-ready.
+- Name edge cases explicitly in the contract and tasks. The implementer will not see the debate; list them.
+- Choose specific patterns and paths. Do not say "use an appropriate helper." Say "use `parseUserInput` at `src/utils/parse.ts:14`." Do not say "related modules" — say `src/auth/`, `src/validation/schemas.ts`, or a concrete glob.
 - Call out codebase gotchas. Eager loading, circular dependencies, test ordering, environment assumptions.
 - Make every step verifiable. Each task should leave the codebase in a working state with a specific command or observable check.
 - State testable criteria. "After step 4, `curl localhost:3000/api/foo` returns 200" — not "the system should be robust."
+- The contract is single-source: if a decision is only in `progress.md` or only in chat, it does not exist for implementation purposes. Architect must persist material decisions in the contract or tasks.
 
 ## Work-folder mini-schema
 
@@ -238,6 +240,14 @@ Use kebab-case, no spaces, and no deeper nesting unless the user explicitly requ
 ## Non-goals
 ## Constraints
 ## Decisions
+## Implementation Contract
+### Target files and areas
+### Expected changes by area
+### Contracts / invariants / compatibility to preserve
+### Decisions already made
+### Normal flow to encode
+### Escalation contract
+### Do not touch / do not introduce
 ## Relevant files and areas
 ## Acceptance Criteria
 - AC-01: <verifiable or observable criterion>
@@ -245,7 +255,11 @@ Use kebab-case, no spaces, and no deeper nesting unless the user explicitly requ
 
 ## Edge cases
 ## Open questions
+## Assumptions and residual risks
 ```
+
+- `## Implementation Contract` is required for every persistent implementation handoff. It is the binding specification that Developer executes and Reviewer verifies against. A handoff without this section is incomplete.
+- `## Assumptions and residual risks` is optional. When present, it may only record minor reversible defaults and known risks for Developer and Reviewer to watch. It must not contain unresolved material product, UX, scope, security, compatibility, or behavior decisions.
 
 ### `tasks.md`
 
@@ -260,9 +274,14 @@ Use kebab-case, no spaces, and no deeper nesting unless the user explicitly requ
 - cancelled: intentionally no longer needed
 
 ## Task table
-| ID | Status | Owner | Task | Covers | Verification | Notes |
-|---|---|---|---|---|---|---|
-| T-001 | pending | Developer | <bounded task> | AC-01, AC-02 | <command or observable check> | <constraints, links, caveats> |
+| ID | Status | Owner | Files / areas | Technical objective | Covers | Dependencies | Verification | Notes |
+|---|---|---|---|---|---|---|---|---|
+| T-001 | pending | Developer | <file paths, globs, or concrete area> | <what to do, not how to architect it> | AC-01, AC-02 | <task IDs or "none"> | <command or observable check> | <constraints, links, caveats> |
+
+## Checkpoints
+| ID | Included tasks | Intended ACs closed | Reviewer focus | Expected evidence | Reviewer required |
+|---|---|---|---|---|---|
+| CP-01 | T-001, T-002 | AC-01, AC-02 | <what Reviewer should verify> | <diff scope + progress evidence> | yes |
 
 ## Coverage notes
 - AC-01 is covered by T-001.
@@ -272,6 +291,42 @@ Use kebab-case, no spaces, and no deeper nesting unless the user explicitly requ
 | Date | Related task | Severity | Status | Finding / resolution note | Suggested follow-up |
 |---|---|---|---|---|---|
 ```
+
+### Task table fields
+
+Every task must be atomic — one bounded unit of work that leaves the codebase in a working state. Each task row must populate:
+
+- **ID**: `T-001`, `T-002`, etc.
+- **Status**: one of the five statuses from the legend.
+- **Owner**: always `Developer`.
+- **Files / areas**: exact file paths when known; otherwise a concrete folder, glob, or pattern (e.g., `src/auth/**/*.ts`). Vague references such as "related modules" are invalid.
+- **Technical objective**: what to do — specific enough that Developer does not need to invent architecture, contracts, or behavior. Describe the change, not the design rationale.
+- **Covers**: AC IDs from `brief.md` that this task helps satisfy (e.g., `AC-01, AC-03`).
+- **Dependencies**: task IDs this task depends on (or `none`). Used to order execution.
+- **Verification**: a command, observable check, or test that confirms the task is complete. Must be concrete and independently verifiable.
+- **Notes**: constraints, caveats, or links to relevant context.
+
+### Checkpoints section
+
+The checkpoints section is mandatory for every persistent handoff. Each checkpoint declares:
+
+- **ID**: `CP-01`, `CP-02`, etc.
+- **Included tasks**: which task IDs are covered by this checkpoint.
+- **Intended ACs closed**: which acceptance criteria should be satisfied when this checkpoint's tasks are done.
+- **Reviewer focus**: what Reviewer should verify — scope, risk areas, specific concerns.
+- **Expected evidence**: the diff scope, progress entries, and validation results that prove the checkpoint work.
+- **Reviewer required**: always `yes` when a checkpoint exists.
+
+### Checkpoint granularity (risk-based)
+
+Checkpoints are mandatory, but their granularity is driven by risk:
+
+- **Small / local feature**: one final checkpoint is acceptable, as long as it declares tasks, ACs, Reviewer focus, and expected evidence.
+- **Medium feature**: normally 2–3 checkpoints.
+- **Sensitive / transversal work** (security, auth, permissions, persistence, migrations, external integrations, public APIs, broad cross-cutting changes): shorter, more frequent checkpoints.
+- **Consecutive mechanical tasks** (renames, formatting, simple refactors): may be grouped into one checkpoint if the review focus and expected evidence remain clear.
+
+The final checkpoint of any feature serves as the final feature review, where Reviewer validates the complete diff, all covered ACs, and the accumulated evidence.
 
 ### `progress.md`
 
@@ -316,6 +371,45 @@ Use kebab-case, no spaces, and no deeper nesting unless the user explicitly requ
 - <explicit scope guardrails>
 ```
 
+## Implementation Contract rules
+
+The `## Implementation Contract` is the binding specification that Developer executes and Reviewer verifies against. It is not advisory. It is the single source of truth for what must be built, how, and with what constraints.
+
+### What the contract must contain
+
+1. **Target files and areas** — name exact file paths when known. When exact paths are not yet known, name a concrete area, folder, glob, or pattern plus the reason local reconnaissance is needed. Vague directions such as "related modules" or "anywhere appropriate" are invalid. Developer may perform local reconnaissance inside assigned files/areas to follow existing conventions, but must not explore broadly to discover the design or make architectural/product decisions.
+
+2. **Expected changes by area** — describe what must change in each target file or area, and what the observable result should be. Be specific enough that Developer does not need to invent architecture, contracts, or behavior.
+
+3. **Contracts / invariants / compatibility to preserve** — list existing interfaces, protocols, data formats, API surfaces, or behavioral invariants that the change must not break. Include cross-module and cross-version compatibility constraints.
+
+4. **Decisions already made** — list the material technical, architectural, and process decisions that have already been resolved and that Developer must follow. These are non-negotiable for implementation. Include decisions about patterns, libraries, data flow, error handling, testing approach, or anything else that Developer should not revisit.
+
+5. **Normal flow to encode** — define the expected sequence: how the feature should work from the caller's or user's perspective. Include expected error and edge-case behavior. Developer executes this flow; Reviewer verifies it.
+
+6. **Escalation contract** — define what happens when Developer hits a contradiction, impossible instruction, or material gap: Developer records the block in `progress.md` with Task/checkpoint, Problem, Evidence, Impact, Proposed options, and Status `blocked awaiting Architect decision`, then stops implementation for the affected area. Architect must persist any material decision that changes the contract into `brief.md` and/or `tasks.md`. No material decision is accepted if it exists only in `progress.md`.
+
+7. **Do not touch / do not introduce** — list files, patterns, subsystems, limits, or artifact types that the change must not add, modify, or depend on. At minimum, explicitly name: no new agents, no new persistent handoff artifacts beyond `.path/work/{slug}/brief.md`, `tasks.md`, and `progress.md`, no automated enforcement, no mandatory worktrees.
+
+### Contradiction invalidation
+
+The `## Implementation Contract` must not silently override the brief's `## Objective`, `## Scope`, `## Non-goals`, `## Constraints`, or `## Acceptance Criteria`. If any material part of the contract contradicts these sections, the handoff is invalid until Architect corrects the contradiction. Developer must block and escalate if a contradiction is discovered during implementation; Architect must resolve it before implementation continues.
+
+### Assumptions and residual risks
+
+The optional `## Assumptions and residual risks` section may only record minor reversible defaults and known risks for Developer and Reviewer to watch during implementation and review. It is not a place to bury unresolved decisions. Specifically, it must never contain:
+
+- Material product, UX, scope, or behavior decisions
+- Security model, authentication, or authorization decisions
+- Compatibility, migration, or versioning decisions
+- Architecture or public-contract decisions
+
+Any decision of these kinds must be resolved and stated explicitly in the contract itself, not deferred as an assumption.
+
+### Path specificity
+
+When exact file paths are known, name them. When exact paths are not yet known but the area is bounded, name a concrete folder, glob, or pattern (e.g., `src/auth/**/*.ts`), plus the reason local reconnaissance is needed. Vague instructions such as "any related module" or "wherever this pattern appears" are invalid and make the handoff incomplete.
+
 ## Mapping acceptance criteria to tasks
 
 When writing `tasks.md`:
@@ -323,6 +417,25 @@ When writing `tasks.md`:
 - Map every task to one or more AC IDs in the `Covers` column (e.g., `AC-01, AC-03`).
 - Verify that every AC in `brief.md` is covered by at least one task. If an AC is not covered, list it explicitly under `## Coverage notes` or adjust the task table.
 - Tasks may cover multiple ACs; one AC may be covered by multiple tasks. Coverage is only meaningful when the task status and evidence support the claim.
+- Every task must populate all columns: Files / areas, Technical objective, Covers, Dependencies, and Verification. A task without a concrete file/area or verifiable outcome is not implementation-ready.
+- Each checkpoint must map to one or more tasks. Every task in the table must belong to at least one checkpoint, or be documented as a pre-checkpoint or post-checkpoint administrative task.
+- The final checkpoint of the feature serves as the final feature review gate. Reviewer validates the complete diff, all covered ACs, and the accumulated evidence at this checkpoint.
+
+## Implementation-ready exit gate
+
+Before finalizing a persistent handoff (Mode 2 or Mode 3), Architect must self-verify that:
+
+1. **Contract present** — `brief.md` contains a complete `## Implementation Contract` with all required subsections (target files/areas, expected changes by area, contracts/invariants/compatibility, decisions already made, normal flow, escalation contract, do not touch/do not introduce). A missing or incomplete contract makes the handoff not implementation-ready.
+
+2. **No material NEEDS CLARIFICATION** — the brief, contract, and tasks must not contain unresolved material decisions. If a technical decision requires repo patterns or existing conventions, resolve it before handoff via codebase exploration. If a product, UX, scope, or behavior decision is open, surface it to the user before handoff.
+
+3. **Executable tasks** — every task in `tasks.md` must be implementable by Developer without inventing architecture, contracts, or behavior. Each task names files/areas, states a technical objective, identifies covered ACs, lists dependencies, and provides observable verification.
+
+4. **Defined checkpoints** — `tasks.md` must contain a checkpoints section. Checkpoints are mandatory but risk-based in granularity: one final checkpoint is acceptable for small/local work; medium work usually has 2–3 checkpoints; sensitive/transversal changes use shorter checkpoints; consecutive mechanical tasks may be grouped. Each checkpoint declares included tasks, intended ACs closed, Reviewer focus, and expected evidence.
+
+5. **Internal self-critique applied** — Architect must internally review the handoff for contradictions, gaps, and impossible instructions before writing. This self-critique is not a separate artifact; it is a quality step applied before the handoff is considered done. If a contradiction is found between the contract and other brief sections, the handoff is not ready.
+
+Only pass a handoff to Developer when all five conditions hold. If any condition fails, stop and resolve before creating or updating the work folder.
 
 ## Technology-agnostic planning
 

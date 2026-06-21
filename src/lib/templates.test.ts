@@ -212,6 +212,56 @@ describe("template permission invariants", () => {
     const content = readTemplate("developer");
     // Must contain at least one positive instruction to invoke Reviewer
     expect(content).toMatch(/invoke\s+(`?reviewer`?)/i);
-    expect(content).toMatch(/invoke reviewer before declaring a task done/i);
+    // Must invoke Reviewer at checkpoints or as a final quality gate,
+    // not after every isolated task
+    expect(content).toMatch(/invoke.*reviewer.*(?:checkpoint|final|quality\s+gate)/i);
+  });
+
+  it("auditor.md is a final closure gate, not a pre-plan or design-review gate (AC-15, AC-16)", () => {
+    const content = readTemplate("auditor");
+    // Must describe itself as a final/closure gate, post-Reviewer
+    expect(content).toMatch(/final closure gate/i);
+    expect(content).toMatch(/distinct from Reviewer/i);
+    // Must explicitly state it is NOT invoked for design-stage work
+    expect(content).toMatch(/not.*(?:pre-plan|design-review)/i);
+    // Must NOT contain design-stage usage instructions
+    expect(content).not.toMatch(/After Architect produces a design/i);
+  });
+
+  it("architect.md defines all required Implementation Contract subsections (AC-02, AC-08)", () => {
+    const content = readTemplate("architect");
+    const requiredSubsections = [
+      "Target files and areas",
+      "Expected changes by area",
+      "Contracts / invariants / compatibility to preserve",
+      "Decisions already made",
+      "Normal flow to encode",
+      "Escalation contract",
+      "Do not touch / do not introduce",
+    ];
+
+    // Extract the brief.md schema block
+    const briefSchema = content.split("### `brief.md`")[1]?.split("### `tasks.md`")[0];
+    expect(briefSchema).toBeDefined();
+    for (const sub of requiredSubsections) {
+      expect(briefSchema).toContain(`### ${sub}`);
+    }
+
+    // Extract the exit gate section and verify all 7 subsections appear
+    const exitGate = content.split("## Implementation-ready exit gate")[1]?.split("## Technology-agnostic planning")[0];
+    expect(exitGate).toBeDefined();
+    // Exit gate uses abbreviated forms in the Contract present condition
+    const exitGateAbbrevs = [
+      "target files/areas",
+      "expected changes by area",
+      "contracts/invariants/compatibility",
+      "decisions already made",
+      "normal flow",
+      "escalation contract",
+      "do not touch/do not introduce",
+    ];
+    for (const abbrev of exitGateAbbrevs) {
+      expect(exitGate.toLowerCase()).toContain(abbrev);
+    }
   });
 });
