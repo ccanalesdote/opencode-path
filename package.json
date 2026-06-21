@@ -15,7 +15,8 @@
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke": "npm run build && bash scripts/smoke-test.sh"
   },
   "keywords": [
     "opencode",

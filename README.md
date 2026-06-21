@@ -4,13 +4,49 @@ A structured multi-agent workflow CLI for [opencode](https://opencode.ai) that i
 
 ## Overview
 
+The workflow follows a structured pipeline from requirements to reviewed implementation, with optional entry points and a user-invoked audit layer:
+
+```mermaid
+flowchart TD
+    User([User])
+
+    subgraph optional_entry["Optional entry (primary)"]
+        Spec["Spec\nClarifies vague stories"]
+        Research["Research\nVerifies docs & APIs"]
+    end
+
+    Architect["Architect\nDesigns the solution\n(primary)"]
+    Developer["Developer\nImplements changes\n(primary)"]
+    Reviewer(["Reviewer\nQuality gate\n(subagent · Developer-invoked)"])
+    Auditor["Auditor\nSkeptical forensic review\n(primary · user-invoked)"]
+    Explore(["Explore\nCodebase reconnaissance\n(subagent · built-in)"])
+
+    User -->|vague story| Spec
+    User -->|need docs/facts| Research
+    User --> Architect
+    Spec -.->|spec ready| Architect
+    Research -.->|facts| Architect
+    Architect --> Developer
+    Developer -->|always before done| Reviewer
+    Reviewer -->|FAIL: fix & retry| Developer
+    Reviewer -->|PASS| User
+
+    User -.->|audit request| Auditor
+
+    Architect -.->|reconnaissance| Explore
+    Developer -.->|reconnaissance| Explore
+    Auditor -.->|reconnaissance| Explore
+```
+
+**Legend:** Solid arrows = primary flow · Dashed arrows = optional/support paths · `(subagent)` = invoked by another agent, not directly by user.
+
 This workflow defines 6 specialized agents with clear responsibilities:
 
 | Agent | Role | Mode | Permissions |
 |-------|------|------|-------------|
 | **Spec** | Clarifies vague stories into testable specs before design | Primary | Read-only, no bash |
 | **Architect** | Designs system architecture, produces structured design decisions | Primary | Work-folder artifact writes + `mkdir -p .path/work/*` |
-| **Developer** | Implements code changes end-to-end | Primary | Broad application edit/write + risk-based bash policy |
+| **Developer** | Implements code changes end-to-end | Primary | Broad application `edit: allow` + risk-based bash policy |
 | **Auditor** | Audits existing work for failures, risks, and gaps | Primary | Read-only + narrow proactive append-only audit notes for explicit work folders |
 | **Research** | Researches documentation, APIs, SDK behavior, and best practices | Primary | Read-only, no bash |
 | **Reviewer** | Reviews code changes, returns PASS/FAIL verdict | Subagent | Read-only + inspection commands + confirmation for project-specific validation |

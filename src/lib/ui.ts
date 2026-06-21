@@ -90,7 +90,7 @@ export async function resolveScope(
   }
 
   if (!context.projectViable && !context.globalViable) {
-    throw new Error("No manageable installation found.");
+    throw new Error("No manageable installation found. Run 'opencode-path init --project' or 'opencode-path init --global' to create one.");
   }
 
   if (!context.projectViable) {

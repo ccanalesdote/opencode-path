@@ -554,6 +554,67 @@ describe("resolveScope", () => {
     ).rejects.toBeInstanceOf(UsageError);
   });
 
+  it("throws UsageError with concrete action when both flags are passed", async () => {
+    const projectTarget = {
+      scope: "project" as const,
+      agentDir: "/project/.opencode/agent",
+      configPath: "/project/.opencode/opencode.json",
+    };
+    const globalTarget = {
+      scope: "global" as const,
+      agentDir: "/global/agent",
+      configPath: "/global/opencode.json",
+    };
+
+    await expect(
+      resolveScope(
+        { global: true, project: true },
+        { projectViable: true, globalViable: true, projectTarget, globalTarget }
+      )
+    ).rejects.toThrow(/pass only one at a time/i);
+  });
+
+  it("throws actionable error when no scope is manageable", async () => {
+    const projectTarget = {
+      scope: "project" as const,
+      agentDir: "/project/.opencode/agent",
+      configPath: "/project/.opencode/opencode.json",
+    };
+    const globalTarget = {
+      scope: "global" as const,
+      agentDir: "/global/agent",
+      configPath: "/global/opencode.json",
+    };
+
+    // Bypass the non-interactive mode check by making stdin appear interactive.
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      process.stdin,
+      "isTTY"
+    );
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
+
+    try {
+      await expect(
+        resolveScope(
+          {},
+          { projectViable: false, globalViable: false, projectTarget, globalTarget }
+        )
+      ).rejects.toThrow(
+        /run 'opencode-path init --project' or 'opencode-path init --global'/i
+      );
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(process.stdin, "isTTY", originalDescriptor);
+      } else {
+        delete (process.stdin as unknown as Record<string, unknown>).isTTY;
+      }
+    }
+  });
+
   it("returns the global scope when --global is passed", async () => {
     const projectTarget = {
       scope: "project" as const,

@@ -3,7 +3,6 @@ description: Researches documentation, APIs, SDK behavior, breaking changes, and
 mode: primary
 permission:
   edit: deny
-  write: deny
   bash: deny
   task: allow
 ---
@@ -33,7 +32,7 @@ Your main goal is to reduce uncertainty by providing accurate, sourced, and rele
 - The user wants architecture or design decisions. Hand it to Architect.
 - The user wants code written. Hand it to Developer.
 - The user wants existing work audited. Hand it to Auditor.
-- The user wants code reviewed. Hand it to Reviewer.
+- The user wants code reviewed. Reviewer handles code reviews.
 - The user wants a vague story clarified. Hand it to Spec.
 
 ## Subagents you may invoke

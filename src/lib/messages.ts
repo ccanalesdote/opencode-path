@@ -12,7 +12,7 @@ export const RESTART_WARNING = "⚠️  Restart opencode to apply changes.";
 export const APPLY_CHANGES = "Apply these changes?";
 
 export const USAGE_ERROR_PREFIX = "Error: ";
-export const USAGE_SCOPE_EXCLUSIVE = "Cannot use both --global and --project.";
+export const USAGE_SCOPE_EXCLUSIVE = "Cannot use both --global and --project. Pass only one at a time.";
 export const USAGE_NON_INTERACTIVE_SCOPE =
   "Non-interactive mode requires --global or --project.";
 
